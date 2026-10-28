@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
     private final ArrayList<RegionMath.Plan[]> alternatives=new ArrayList<>();
     private final ArrayList<Integer> selectedModes=new ArrayList<>();
     private final ArrayList<Integer> cutIntensities=new ArrayList<>();
+    private final ArrayList<int[]> perCutZones=new ArrayList<>();
     // Lower resolution cached boundary frames avoid rescanning videos when changing a look.
     private final ArrayList<Bitmap> firstFrames=new ArrayList<>(), lastFrames=new ArrayList<>();
     private final ArrayList<Bitmap> earlyFrames=new ArrayList<>(), nearEndFrames=new ArrayList<>();
@@ -164,7 +165,7 @@ public class MainActivity extends Activity {
 
     private void invalidateAnalysis(){
         analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
-        selectedModes.clear();cutIntensities.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
+        selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
         nearEndFrames.clear();endFaces.clear();previews.removeAllViews();
     }
     private void refresh(){
@@ -210,7 +211,7 @@ public class MainActivity extends Activity {
                                        ArrayList<Bitmap> earlys,ArrayList<Bitmap> ends,
                                        ArrayList<RegionMath.FaceBox> lastFaces,
                                        ArrayList<FaceTimeline> faceTracks,
-                                       ArrayList<Integer> modes,ArrayList<Integer> strengths,float strength,
+                                       ArrayList<Integer> modes,ArrayList<Integer> strengths,ArrayList<int[]> zones,float strength,
                                        boolean regional,boolean align) {
         MatchResult output=new MatchResult();
         output.selected.add(RegionMath.Plan.identity());
@@ -234,7 +235,7 @@ public class MainActivity extends Activity {
                     pixels(earlys.get(i)),earlys.get(i).getWidth(),earlys.get(i).getHeight(),earlyFace,strength);
                 calibrated=RegionMath.blendStable(calibrated,second);
             }
-            RegionMath.Plan[] alternatives=MatchChoices.candidates(calibrated,strengths.get(i));
+            RegionMath.Plan[] alternatives=MatchChoices.candidates(calibrated,strengths.get(i),zones.get(i));
             int mode=modes.get(i);
             if(!MatchChoices.valid(mode))throw new IllegalArgumentException("Tentativa de cor inválida");
             output.variants.add(alternatives);
@@ -282,9 +283,21 @@ public class MainActivity extends Activity {
         recomputeSelected(clipIndex);
     }
 
+    private void chooseCutZone(int clipIndex,int zone,int strength){
+        if(!analyzed||busy||clipIndex<1||clipIndex>=perCutZones.size()||zone<0||zone>=4)return;
+        strength=Math.max(0,Math.min(150,strength));
+        int[] values=perCutZones.get(clipIndex);
+        if(values[zone]==strength&&selectedModes.get(clipIndex)==MatchChoices.CUSTOM)return;
+        values[zone]=strength;
+        selectedModes.set(clipIndex,MatchChoices.CUSTOM);
+        recomputeSelected(clipIndex);
+    }
+
     private void recomputeSelected(int clipIndex){
         final ArrayList<Integer> selections=new ArrayList<>(selectedModes);
         final ArrayList<Integer> strengths=new ArrayList<>(cutIntensities);
+        final ArrayList<int[]> zones=new ArrayList<>();
+        for(int[] values:perCutZones)zones.add(values.clone());
         final float strength=intensity.getProgress()/100f;
         final boolean regional=regionSwitch.isChecked(),align=alignSwitch.isChecked();
         busy=true;refresh();say("Aplicando tentativa "+MatchChoices.LABELS[mode]+
@@ -292,7 +305,7 @@ public class MainActivity extends Activity {
         worker.submit(()->{
             try{
                 MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,
-                    endFaces,tracks,selections,strengths,strength,regional,align);
+                    endFaces,tracks,selections,strengths,zones,strength,regional,align);
                 main.post(()->{if(!ended)installResult(result);});
             }catch(Exception e){main.post(()->{
                 busy=false;analyzed=false;refresh();
@@ -317,6 +330,7 @@ public class MainActivity extends Activity {
                 ArrayList<FaceTimeline> nextTracks=new ArrayList<>();
                 ArrayList<Integer> modes=new ArrayList<>();
                 ArrayList<Integer> strengths=new ArrayList<>();
+                ArrayList<int[]> zones=new ArrayList<>();
                 for(int i=0;i<selected.size();i++){
                     Uri uri=selected.get(i);
                     Bitmap last=frame(uri,true);
@@ -329,12 +343,13 @@ public class MainActivity extends Activity {
                     nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector));
                     modes.add(i==0?MatchChoices.ORIGINAL:MatchChoices.BALANCED);
                     strengths.add(100);
+                    zones.add(new int[]{100,100,100,100});
                     final int progressIndex=i+1;
                     main.post(()->{progress.setProgress(progressIndex*50/selected.size());
                         say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
                 MatchResult result=computeChoices(firsts,lasts,earlys,ends,faces,nextTracks,
-                    modes,strengths,strength,regional,align);
+                    modes,strengths,zones,strength,regional,align);
                 main.post(()->{
                     if(ended)return;
                     firstFrames.clear();firstFrames.addAll(firsts);
@@ -345,6 +360,7 @@ public class MainActivity extends Activity {
                     tracks.clear();tracks.addAll(nextTracks);
                     selectedModes.clear();selectedModes.addAll(modes);
                     cutIntensities.clear();cutIntensities.addAll(strengths);
+                    perCutZones.clear();perCutZones.addAll(zones);
                     installResult(result);
                     if(thenExport)startExport();
                 });
@@ -438,6 +454,27 @@ public class MainActivity extends Activity {
                     chooseCutStrength(clipIndex,sb.getProgress());
                 }
             });
+
+            if(selectedModes.get(clipIndex)==MatchChoices.CUSTOM){
+                previews.addView(text("Ajuste fino só neste corte — altere cada região separadamente:",12,true));
+                String[] zones={"Cenário", "Céu/azul", "Pele", "Lábios"};
+                for(int z=0;z<4;z++){
+                    final int zone=z;
+                    final SeekBar local=new SeekBar(this);
+                    local.setMax(150);
+                    local.setProgress(perCutZones.get(clipIndex)[z]);
+                    previews.addView(text(zones[z]+": "+perCutZones.get(clipIndex)[z]+
+                        "% (0=desligado; 100=calibração; 150=mais forte)",11,false));
+                    previews.addView(local);
+                    local.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+                        @Override public void onProgressChanged(SeekBar seek,int p,boolean fromUser){}
+                        @Override public void onStartTrackingTouch(SeekBar seek){}
+                        @Override public void onStopTrackingTouch(SeekBar seek){
+                            chooseCutZone(clipIndex,zone,seek.getProgress());
+                        }
+                    });
+                }
+            }
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
                 " · As cenas seguintes são recalibradas se esta opção mudar.",11,false));
         }
