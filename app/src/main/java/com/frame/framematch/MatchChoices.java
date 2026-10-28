@@ -6,10 +6,10 @@ package com.frame.framematch;
  * Every alternative remains constrained by the safety bounds in RegionMath/RegionEffect.
  */
 public final class MatchChoices {
-    public static final int ORIGINAL=0, SOFT=1, BALANCED=2, SCENERY=3, SKIN=4;
-    public static final int COUNT=5;
+    public static final int ORIGINAL=0, SOFT=1, BALANCED=2, SCENERY=3, SKIN=4, CUSTOM=5;
+    public static final int COUNT=6;
     public static final String[] LABELS={
-        "Original", "Suave", "Equilibrada", "Priorizar cenário", "Priorizar pele"
+        "Original", "Suave", "Equilibrada", "Priorizar cenário", "Priorizar pele", "Ajuste fino"
     };
     private MatchChoices(){}
 
@@ -24,7 +24,7 @@ public final class MatchChoices {
         for(int k=0;k<4;k++) {
             if(k>0 && scale[k]<=0f)calibrated[k]=false;
             for(int c=0;c<3;c++) {
-                float t=RegionMath.clamp(scale[k],0f,1f);
+                float t=RegionMath.clamp(scale[k],0f,1.5f);
                 gains[k][c]=1f+(base.gains[k][c]-1f)*t;
             }
         }
@@ -44,7 +44,13 @@ public final class MatchChoices {
     }
 
     public static RegionMath.Plan[] candidates(RegionMath.Plan calibrated,int percent) {
+        return candidates(calibrated,percent,new int[]{100,100,100,100});
+    }
+    public static RegionMath.Plan[] candidates(RegionMath.Plan calibrated,int percent,int[] levels) {
+        if(levels==null||levels.length!=4)throw new IllegalArgumentException("Quatro controles de cor necessários");
         RegionMath.Plan[] result=candidates(calibrated);
+        result[CUSTOM]=scaled(calibrated,levels[0]/100f,levels[1]/100f,
+                             levels[2]/100f,levels[3]/100f);
         for(int i=0;i<result.length;i++)result[i]=intensity(result[i],percent);
         return result;
     }
@@ -56,7 +62,8 @@ public final class MatchChoices {
             scaled(calibrated,.45f,.45f,.45f,.45f),
             scaled(calibrated,1f,1f,1f,1f),
             scaled(calibrated,.9f,1f,0f,0f),
-            scaled(calibrated,.3f,0f,1f,1f)
+            scaled(calibrated,.3f,0f,1f,1f),
+            scaled(calibrated,1f,1f,1f,1f)
         };
     }
 }
