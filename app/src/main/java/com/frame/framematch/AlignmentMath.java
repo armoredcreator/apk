@@ -20,8 +20,8 @@ public final class AlignmentMath {
         if(reference==null||target==null||!reference.valid()||!target.valid())return Transform.identity();
         float factor=RegionMath.clamp(strength,0,1);
         float desired=reference.eyeDistance/target.eyeDistance;
-        // prevent aggressive zoom and distorted crops
-        if(desired<1.01f||desired>1.20f)return Transform.identity();
+        // V39 allows a measured, bounded correction; 1.40 is a safety ceiling, not a default
+        if(desired<1.01f||desired>1.40f)return Transform.identity();
         float angle=reference.angle-target.angle;
         if(Math.abs(angle)>.11f)return Transform.identity(); // ~6 degrees
         float z=1+(desired-1)*factor;
