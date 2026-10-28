@@ -24,7 +24,7 @@ assert 'selectedModes.set(clipIndex,mode)' in main
 assert 'MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,' in main
 assert 'if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)' in main
 assert 'HorizontalScrollView scroll=new HorizontalScrollView(this)' in main
-assert 'new Bitmap[3+MatchChoices.COUNT]' in main
+assert 'new Bitmap[4+MatchChoices.COUNT]' in main
 assert 'perCutZones' in main and 'chooseCutZone' in main
 assert 'cutIntensities' in main and 'chooseCutStrength' in main
 assert 'MatchChoices.CUSTOM' in main
@@ -52,3 +52,16 @@ assert '.setRequestedVideoEncoderSettings(new VideoEncoderSettings.Builder()' in
 assert 'masterProfile.outputSize(matchSizeSwitch.isChecked())' in main
 assert 'METADATA_KEY_VIDEO_WIDTH' in main and 'METADATA_KEY_VIDEO_HEIGHT' in main
 print("QualityProfile, opções simultâneas e seleção em lote: OK")
+
+align=Path("app/src/main/java/com/frame/framematch/AlignmentMath.java").read_text(encoding="utf-8")
+face=Path("app/src/main/java/com/frame/framematch/FaceTimeline.java").read_text(encoding="utf-8")
+zoom=Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
+assert 'setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)' in face
+assert 'FaceLandmark.LEFT_EYE' in face and 'FaceLandmark.RIGHT_EYE' in face
+assert 'ContinuityZoom.facePlan(' in main
+assert 'lastLandmarks.get(i-1),firstLandmarks.get(i)' in main
+assert 'AlignmentMath.estimate' in zoom
+assert 'Math.abs(tx)>.16f||Math.abs(ty)>.16f' in align
+assert 'Bitmap[] previews=new Bitmap[4+MatchChoices.COUNT]' in main
+assert 'overlay(previews[1],small(aligned))' in main
+print("Facial landmark match, onion skin preview and constraints: OK")
