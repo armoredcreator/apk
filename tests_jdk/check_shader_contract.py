@@ -34,7 +34,7 @@ assert 'final Bitmap masterNear=ends.get(0)' in main, "early palette sample must
 assert 'MasterColorMatch.calibrate(masterBoundary,masterNearby' in main, "all scene color matches must use Clip 1"
 assert 'RegionMath.Plan previous=output.selected.get(i-1)' not in main, "cascaded color reference reintroduced"
 assert 'RegionMath.analyze(' in master and 'RegionMath.blendStable' in master
-assert 'ContinuityZoom.plan(timeline,adjacentFace)' in main, "movement continuity still uses adjacent clips"
+assert 'lastLandmarks.get(i-1),firstLandmarks.get(i)' in main, "movement continuity still uses adjacent clips"
 assert '"CLIP 1: cores"' in main
 print("Shader SDR, master Clip 1, seis alternativas, cor por zona e exportação: OK")
 
