@@ -25,6 +25,7 @@ import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -90,6 +91,9 @@ public class MainActivity extends Activity {
     private volatile float analyzedStrength=1f;
     private Transformer transformer;
     private File temporaryOutput;
+    private File previewOutput;
+    private VideoView previewPlayer;
+    private boolean previewRendering=false;
     private Uri outputUri;
     private boolean ended=false;
 
@@ -163,6 +167,7 @@ public class MainActivity extends Activity {
         batchModeButton=button("APLICAR TENTATIVA DO CORTE 1 → 2 A TODOS",v->applyModeToAll());
         container.addView(batchModeButton);
         previews=new LinearLayout(this); previews.setOrientation(LinearLayout.VERTICAL);container.addView(previews);
+        container.addView(text("PRÉVIA RÁPIDA: assista ao corte com as correções antes de exportar tudo.",12,true));
         exportButton=button("UNIR E EXPORTAR MP4",v->prepareExport());container.addView(exportButton);
         cancelButton=button("CANCELAR EXPORTAÇÃO",v->cancelExport());container.addView(cancelButton);
         cancelButton.setVisibility(View.GONE);
@@ -720,9 +725,106 @@ public class MainActivity extends Activity {
                     });
                 }
             }
+            previews.addView(button("▶ PRÉVIA DESTA TRANSIÇÃO (aprox. 4 segundos)",
+                v->renderCutPreview(clipIndex)));
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
                 " · Referência de cor fixa no Clip 1. Outros cortes não mudam.",11,false));
         }
+    }
+
+    private long durationMs(Uri uri) throws Exception{
+        MediaMetadataRetriever mm=new MediaMetadataRetriever();
+        try{
+            mm.setDataSource(this,uri);
+            String d=mm.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            return d==null?0:Long.parseLong(d);
+        }finally{mm.release();}
+    }
+
+    /** Short real Media3 export, with the same shader and alignment as the full video. */
+    private void renderCutPreview(int nextClip){
+        if(busy||!analyzed||nextClip<1||nextClip>=clips.size())return;
+        if(Math.abs(analyzedStrength-intensity.getProgress()/100f)>.001f){
+            error("Analise as cenas novamente antes de gerar a prévia.");return;
+        }
+        try{
+            long duration=durationMs(clips.get(nextClip-1));
+            long previousStart=Math.max(nextClip==1?0:entryOffsetsMs.get(nextClip-1),duration-1500);
+            long nextStart=entryOffsetsMs.get(nextClip);
+            long nextDuration=durationMs(clips.get(nextClip));
+            long nextEnd=Math.min(nextDuration,nextStart+2500);
+            if(duration<=previousStart||nextEnd<=nextStart)throw new Exception("Cenas curtas demais para prévia");
+            busy=true;previewRendering=true;refresh();progress.setProgress(0);
+            previewOutput=new File(getCacheDir(),"framematch_preview.mp4");
+            if(previewPlayer!=null){previewPlayer.stopPlayback();previewPlayer=null;}
+            if(previewOutput.exists()&&!previewOutput.delete())throw new Exception("Não foi possível substituir a prévia antiga");
+
+            ArrayList<EditedMediaItem> edits=new ArrayList<>();
+            int[] sourceIndices={nextClip-1,nextClip};
+            long[] starts={previousStart,nextStart};
+            long[] ends={duration,nextEnd};
+            for(int k=0;k<2;k++){
+                int idx=sourceIndices[k];
+                MediaItem media=new MediaItem.Builder().setUri(clips.get(idx))
+                    .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(starts[k]).setEndPositionMs(ends[k]).build()).build();
+                ArrayList<androidx.media3.common.Effect> effects=new ArrayList<>();
+                if(idx>0){
+                    if(regionSwitch.isChecked()&&selectedModes.get(idx)!=MatchChoices.ORIGINAL)
+                        effects.add(new RegionEffect(plans.get(idx),tracks.get(idx)));
+                    // The beginning of this preview's first clip must not re-trigger
+                    // the alignment intended for its OWN preceding cut.
+                    if(k==1&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
+                }
+                int[] size=masterProfile==null?new int[]{540,960}:
+                    masterProfile.outputSize(matchSizeSwitch.isChecked());
+                effects.add(Presentation.createForWidthAndHeight(size[0],size[1],
+                    Presentation.LAYOUT_SCALE_TO_FIT));
+                EditedMediaItem.Builder item=new EditedMediaItem.Builder(media)
+                    .setEffects(new Effects(Collections.emptyList(),effects));
+                if(masterProfile!=null&&matchFpsSwitch.isChecked()&&masterProfile.frameRateCeiling(true)>0)
+                    item.setFrameRate(masterProfile.frameRateCeiling(true));
+                edits.add(item.build());
+            }
+            Composition composition=new Composition.Builder(
+                EditedMediaItemSequence.withAudioAndVideoFrom(edits)).build();
+            Transformer.Builder builder=new Transformer.Builder(this);
+            if(masterProfile!=null&&matchBitrateSwitch.isChecked())
+                builder.setEncoderFactory(new DefaultEncoderFactory.Builder(this)
+                    .setRequestedVideoEncoderSettings(new VideoEncoderSettings.Builder()
+                        .setBitrate(masterProfile.requestedBitrate).build()).build());
+            transformer=builder.setVideoMimeType(MimeTypes.VIDEO_H264)
+                .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                .addListener(new Transformer.Listener(){
+                    @Override public void onCompleted(Composition c,ExportResult r){
+                        transformer=null;previewRendering=false;busy=false;progress.setProgress(100);
+                        refresh();playCutPreview();
+                    }
+                    @Override public void onError(Composition c,ExportResult r,ExportException e){
+                        previewRendering=false;endExport("Falha ao gerar prévia: "+e.getMessage());
+                    }
+                }).build();
+            say("Gerando prévia curta somente deste corte, com as correções selecionadas...");
+            transformer.start(composition,previewOutput.getAbsolutePath());
+            trackProgress();
+        }catch(Exception e){previewRendering=false;endExport("Falha na prévia: "+e.getMessage());}
+    }
+
+    private void playCutPreview(){
+        if(previewOutput==null||!previewOutput.isFile()||previewOutput.length()<1000){
+            error("A prévia não produziu um arquivo válido.");return;
+        }
+        if(previewPlayer!=null)previewPlayer.stopPlayback();
+        previewPlayer=new VideoView(this);
+        previews.addView(text("Prévia renderizada do corte. Assista e ajuste antes de exportar.",12,true),0);
+        previews.addView(previewPlayer,1,new LinearLayout.LayoutParams(-1,dp(265)));
+        previewPlayer.setVideoPath(previewOutput.getAbsolutePath());
+        previewPlayer.setOnPreparedListener(mp->{mp.setLooping(true);previewPlayer.start();});
+        previewPlayer.setOnErrorListener((mp,what,extra)->{
+            error("Falha ao reproduzir prévia no aparelho ("+what+").");return true;
+        });
+        previewPlayer.requestFocus();
+        say("Prévia pronta. O MP4 completo ainda não foi exportado.");
     }
 
     private void prepareExport(){
@@ -841,7 +943,8 @@ public class MainActivity extends Activity {
     }
     private void cancelExport(){
         if(transformer!=null)transformer.cancel();
-        endExport("Exportação cancelada.");
+        previewRendering=false;
+        endExport("Exportação ou prévia cancelada.");
     }
     private void endExport(String message){
         transformer=null;busy=false;refresh();
@@ -851,6 +954,7 @@ public class MainActivity extends Activity {
     @Override protected void onDestroy(){
         ended=true;
         if(transformer!=null)transformer.cancel();
+        if(previewPlayer!=null)previewPlayer.stopPlayback();
         worker.shutdownNow();
         super.onDestroy();
     }
