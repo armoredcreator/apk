@@ -118,14 +118,14 @@ public class MainActivity extends Activity {
         regionSwitch.setText("Corrigir céu, pele, lábios e cenário separadamente (GPU)");
         regionSwitch.setChecked(true);container.addView(regionSwitch);
         alignSwitch=new android.widget.CheckBox(this);
-        alignSwitch.setText("Encaixe facial automático por olhos entre clipes consecutivos (experimental)");
-        alignSwitch.setChecked(false);container.addView(alignSwitch);
+        alignSwitch.setText("V39: aplicar zoom adaptativo automaticamente quando a transição precisar");
+        alignSwitch.setChecked(true);container.addView(alignSwitch);
         smartEntrySwitch=new android.widget.CheckBox(this);
         smartEntrySwitch.setText("Buscar melhor quadro de entrada (até 1,5s; pode cortar início da fala)");
         smartEntrySwitch.setChecked(false);container.addView(smartEntrySwitch);
         smartEntrySwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         container.addView(text("Força do encaixe facial (0–100%)",12,true));
-        faceStrength=new SeekBar(this);faceStrength.setMax(100);faceStrength.setProgress(70);
+        faceStrength=new SeekBar(this);faceStrength.setMax(100);faceStrength.setProgress(100);
         container.addView(faceStrength);
         container.addView(text("Duração do retorno ao original (0,5 a 3 segundos)",12,true));
         faceDuration=new SeekBar(this);faceDuration.setMax(2500);faceDuration.setProgress(1500);
