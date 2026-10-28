@@ -16,7 +16,7 @@ assert 'float fade=.35f+.65f*smoothstep(.02f,.12f,lum)' in math, "preview needs 
 assert 'blendStable' in math and 'compact(frameOffset(uri,false,500_000L))' in main, "early boundary sample is missing"
 assert 'release=2_800_000L' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
 choices=Path("app/src/main/java/com/frame/framematch/MatchChoices.java").read_text(encoding="utf-8")
-assert 'public static final int COUNT=5' in choices
+assert 'public static final int COUNT=6' in choices
 assert 'scaled(calibrated,.45f,.45f,.45f,.45f)' in choices
 assert 'scaled(calibrated,.9f,1f,0f,0f)' in choices
 assert 'scaled(calibrated,.3f,0f,1f,1f)' in choices
@@ -25,4 +25,7 @@ assert 'MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nea
 assert 'if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)' in main
 assert 'HorizontalScrollView scroll=new HorizontalScrollView(this)' in main
 assert 'new Bitmap[2+MatchChoices.COUNT]' in main
-print("Shader SDR, cinco alternativas, seleção e exportação: OK")
+assert 'perCutZones' in main and 'chooseCutZone' in main
+assert 'cutIntensities' in main and 'chooseCutStrength' in main
+assert 'MatchChoices.CUSTOM' in main
+print("Shader SDR, seis alternativas, cor por zona e exportação: OK")
