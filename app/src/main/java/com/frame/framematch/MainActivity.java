@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
         container.addView(enableAllButton);
         container.addView(text("Ativar tudo inclui o zoom experimental. Você pode desligá-lo depois. As 6 alternativas de cor são EXCLUSIVAS; use Ajuste fino para combinar regiões.",12,false));
         cinematicZoomSwitch=new android.widget.CheckBox(this);
-        cinematicZoomSwitch.setText("ZOOM V37 (apenas 2 clipes): 33% nos 3s antes do corte, recuo até o fim (opcional)");
+        cinematicZoomSwitch.setText("ZOOM CINEMATOGRÁFICO (alvo V39, experimental): 33% nos 3s antes do corte; recuo contínuo até o fim (2 clipes)");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
         cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());

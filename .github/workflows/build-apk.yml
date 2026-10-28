@@ -57,7 +57,7 @@ jobs:
             echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
             exit 0
           fi
-          TAG="v0.9.0-alpha"
+          TAG="v0.9.1-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -65,7 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.9.0 - zoom cinematográfico experimental" \
-              --notes "APK debug experimental. Adiciona zoom V37 opcional para dois clipes, com antecipação de 3 segundos e recuo lento até o fim do segundo clipe. NÃO há garantia de equivalência visual com o teste V37 processado em desktop. Detecção automática generalizada ainda não implementada." \
+              --title "FrameMatch Android 0.9.1 - recuo contínuo experimental, alvo V39" \
+              --notes "APK experimental: curva única de recuo contínuo no Android para investigar o salto reportado. V39 é a referência obrigatória; NÃO há paridade comprovada sem testar exportação Android dos clipes 94/95. Detecção automática generalizada ainda não implementada." \
               --prerelease
           fi
