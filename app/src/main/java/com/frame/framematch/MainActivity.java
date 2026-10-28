@@ -151,9 +151,9 @@ public class MainActivity extends Activity {
         matchFpsSwitch.setChecked(false);container.addView(matchFpsSwitch);
         enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
         container.addView(enableAllButton);
-        container.addView(text("Ativar tudo inclui o zoom experimental. Você pode desligá-lo depois. As 6 alternativas de cor são EXCLUSIVAS; use Ajuste fino para combinar regiões.",12,false));
+        container.addView(text("Ativar tudo liga também o zoom V39. Para usar sem zoom, desmarque a opção V39. As 6 alternativas de cor são EXCLUSIVAS.",12,false));
         cinematicZoomSwitch=new android.widget.CheckBox(this);
-        cinematicZoomSwitch.setText("ZOOM CINEMATOGRÁFICO (alvo V39, experimental): 33% nos 3s antes do corte; recuo contínuo até o fim (2 clipes)");
+        cinematicZoomSwitch.setText("ZOOM V39 — 33% antes da união e recuo LENTO até o enquadramento original da cena 2 (2 clipes)");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
         cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
@@ -323,8 +323,9 @@ public class MainActivity extends Activity {
         matchSizeSwitch.setChecked(true);
         matchBitrateSwitch.setChecked(true);
         matchFpsSwitch.setChecked(true);
+        cinematicZoomSwitch.setChecked(true);
         if(!changed)invalidateAnalysis();
-        say("Todas as correções compatíveis ativadas. Zoom é experimental e só atua no início do clipe.");
+        say("Correções ativadas, inclusive zoom V39: aproxima antes do corte e recua durante toda a cena 2.");
         refresh();
     }
     private void autoNaturalAll(){
@@ -730,7 +731,7 @@ public class MainActivity extends Activity {
                     });
                 }
             }
-            previews.addView(button("▶ PRÉVIA DESTA TRANSIÇÃO (aprox. 4 segundos)",
+            previews.addView(button("▶ PRÉVIA DESTA TRANSIÇÃO (V39 mostra o recuo completo)",
                 v->renderCutPreview(clipIndex)));
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
                 " · Referência de cor fixa no Clip 1. Outros cortes não mudam.",11,false));
@@ -754,10 +755,12 @@ public class MainActivity extends Activity {
         }
         try{
             long duration=durationMs(clips.get(nextClip-1));
-            long previousStart=Math.max(nextClip==1?0:entryOffsetsMs.get(nextClip-1),duration-1500);
+            boolean fullRecedePreview=cinematicZoomSwitch.isChecked() && clips.size()==2;
+            long previousStart=Math.max(nextClip==1?0:entryOffsetsMs.get(nextClip-1),
+                duration-(fullRecedePreview?3000:1500));
             long nextStart=entryOffsetsMs.get(nextClip);
             long nextDuration=durationMs(clips.get(nextClip));
-            long nextEnd=Math.min(nextDuration,nextStart+2500);
+            long nextEnd=fullRecedePreview?nextDuration:Math.min(nextDuration,nextStart+2500);
             if(duration<=previousStart||nextEnd<=nextStart)throw new Exception("Cenas curtas demais para prévia");
             busy=true;previewRendering=true;refresh();progress.setProgress(0);
             previewOutput=new File(getCacheDir(),"framematch_preview.mp4");
