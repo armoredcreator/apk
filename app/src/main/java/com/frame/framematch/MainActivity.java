@@ -265,7 +265,7 @@ public class MainActivity extends Activity {
         analyzed=true;analyzedStrength=intensity.getProgress()/100f;
         busy=false;progress.setProgress(100);
         renderPreviews(result.previewRows);refresh();
-        say("Análise pronta: escolha uma das cinco tentativas para cada corte. O MP4 usa as opções marcadas.");
+        say("Análise pronta: escolha uma das seis tentativas por corte. O MP4 usa as opções marcadas.");
     }
 
     private void chooseColor(int clipIndex,int mode){
@@ -300,7 +300,7 @@ public class MainActivity extends Activity {
         for(int[] values:perCutZones)zones.add(values.clone());
         final float strength=intensity.getProgress()/100f;
         final boolean regional=regionSwitch.isChecked(),align=alignSwitch.isChecked();
-        busy=true;refresh();say("Aplicando tentativa "+MatchChoices.LABELS[mode]+
+        busy=true;refresh();say("Aplicando tentativa "+MatchChoices.LABELS[selections.get(clipIndex)]+
             " ao corte "+clipIndex+" e atualizando as próximas referências...");
         worker.submit(()->{
             try{
