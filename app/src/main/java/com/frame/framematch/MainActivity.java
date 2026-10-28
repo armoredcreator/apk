@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -225,7 +227,26 @@ public class MainActivity extends Activity {
         }catch(Exception ignored){return 0;}
     }
 
+    /** Obtain video stream FPS/bitrate (not container + audio bitrate) when available. */
+    private int[] readVideoTrack(Uri uri){
+        MediaExtractor extractor=new MediaExtractor();
+        try{
+            extractor.setDataSource(this,uri,null);
+            for(int i=0;i<extractor.getTrackCount();i++){
+                MediaFormat f=extractor.getTrackFormat(i);
+                String mime=f.getString(MediaFormat.KEY_MIME);
+                if(mime!=null && mime.startsWith("video/")){
+                    int bitrate=f.containsKey(MediaFormat.KEY_BIT_RATE)?f.getInteger(MediaFormat.KEY_BIT_RATE):0;
+                    int fps=f.containsKey(MediaFormat.KEY_FRAME_RATE)?f.getInteger(MediaFormat.KEY_FRAME_RATE):0;
+                    return new int[]{bitrate,fps};
+                }
+            }
+        }catch(Exception ignored){}finally{extractor.release();}
+        return new int[]{0,0};
+    }
+
     private QualityProfile inspectMaster(Uri uri) throws Exception {
+        int[] stream=readVideoTrack(uri);
         MediaMetadataRetriever m=new MediaMetadataRetriever();
         try{
             m.setDataSource(this,uri);
@@ -233,8 +254,8 @@ public class MainActivity extends Activity {
                 metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH),
                 metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT),
                 metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION),
-                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_BITRATE),
-                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE));
+                stream[0]>0?stream[0]:metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_BITRATE),
+                stream[1]>0?stream[1]:metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE));
         }finally{m.release();}
     }
     private void loadMasterProfile(){
