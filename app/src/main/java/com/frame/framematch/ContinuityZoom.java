@@ -90,9 +90,10 @@ public final class ContinuityZoom implements MatrixTransformation {
         if (isIdentity(change)) return null;
 
         long retreatUs = clampWindow(retreatMs) * 1000L;
-        float delta = Math.abs(change.zoom - 1f) + change.displacement();
-        long leadUs = 1_200_000L + (long) (delta * 6_000_000L);
-        leadUs = Math.max(1_500_000L, Math.min(3_000_000L, leadUs));
+        // Reference V39 timing: the anticipation starts exactly three seconds
+        // before the cut. Short clips are shortened only when necessary to avoid
+        // creating an invalid/negative window.
+        long leadUs = 3_000_000L;
 
         // A short previous scene cannot safely host an anticipation ramp.
         long safeLead = Math.min(leadUs, Math.max(0L, previousDurationUs - 100_000L));
