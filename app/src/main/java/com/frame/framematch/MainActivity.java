@@ -127,8 +127,8 @@ public class MainActivity extends Activity {
         container.addView(text("Força do encaixe facial (0–100%)",12,true));
         faceStrength=new SeekBar(this);faceStrength.setMax(100);faceStrength.setProgress(100);
         container.addView(faceStrength);
-        container.addView(text("Duração do retorno ao original (0,5 a 3 segundos)",12,true));
-        faceDuration=new SeekBar(this);faceDuration.setMax(2500);faceDuration.setProgress(1500);
+        container.addView(text("V39: retorno lento ao enquadramento original (até 3 segundos)",12,true));
+        faceDuration=new SeekBar(this);faceDuration.setMax(2500);faceDuration.setProgress(2500);
         container.addView(faceDuration);
         SeekBar.OnSeekBarChangeListener faceChanged=new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
