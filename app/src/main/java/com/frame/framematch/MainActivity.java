@@ -789,7 +789,8 @@ public class MainActivity extends Activity {
                         // Approach is computed from the original source timeline, not the clipped preview.
                         effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f));
                     }else{
-                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f));
+                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f,
+                            endFaces.get(idx-1),tracks.get(idx)));
                     }
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
@@ -887,11 +888,13 @@ public class MainActivity extends Activity {
                         fx.add(CinematicCutZoom.before(i==0?0:entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
                     }else if(i>0){
                         // Last clip: finish the recede before the final frame.
-                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f,
+                            endFaces.get(i-1),tracks.get(i)));
                     }
                     // Middle clips need a recede from the previous cut as well.
                     if(i>0 && i+1<clips.size()){
-                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f,
+                            endFaces.get(i-1),tracks.get(i)));
                     }
                 }
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
