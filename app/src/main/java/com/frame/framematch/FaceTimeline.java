@@ -10,6 +10,8 @@ import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.face.Face;
 import com.google.mlkit.vision.face.FaceDetection;
+import com.google.mlkit.vision.face.FaceLandmark;
+import android.graphics.PointF;
 import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
@@ -56,9 +58,33 @@ public final class FaceTimeline {
             RegionMath.clamp(r.width()/(float)bitmap.getWidth(),0,1),
             RegionMath.clamp(r.height()/(float)bitmap.getHeight(),0,1));
     }
+    /** Eye midpoint and inter-eye angle at the cut boundary. Falls back to box when landmarks unavailable. */
+    public static AlignmentMath.Pose pose(FaceDetector detector,Bitmap bitmap) throws Exception {
+        if(bitmap==null)return null;
+        List<Face> faces=Tasks.await(detector.process(InputImage.fromBitmap(bitmap,0)),12,TimeUnit.SECONDS);
+        Face biggest=null;int best=0;
+        for(Face face:faces){
+            Rect rect=face.getBoundingBox();int area=rect.width()*rect.height();
+            if(area>best){best=area;biggest=face;}
+        }
+        if(biggest==null)return null;
+        FaceLandmark left=biggest.getLandmark(FaceLandmark.LEFT_EYE);
+        FaceLandmark right=biggest.getLandmark(FaceLandmark.RIGHT_EYE);
+        if(left==null||right==null)return null;
+        PointF a=left.getPosition(),b=right.getPosition();
+        float w=bitmap.getWidth(),h=bitmap.getHeight();
+        float distance=(float)Math.hypot(b.x-a.x,b.y-a.y)/w;
+        float angle=(float)Math.atan2(-(b.y-a.y),b.x-a.x);
+        AlignmentMath.Pose pose=new AlignmentMath.Pose(
+            RegionMath.clamp((a.x+b.x)/(2*w),0,1),
+            RegionMath.clamp((a.y+b.y)/(2*h),0,1),distance,angle);
+        return pose.valid()?pose:null;
+    }
+
     public static FaceDetector createDetector(){
         return FaceDetection.getClient(new FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
             .setMinFaceSize(.10f).build());
     }
     public static FaceTimeline scan(Context ctx,Uri video,long maxDurationUs,FaceDetector detector) throws Exception {
