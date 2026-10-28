@@ -17,7 +17,7 @@ jobs:
   android:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -43,3 +43,21 @@ jobs:
         with:
           name: FrameMatch-Android-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publicar APK de testes para download direto
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/framematch-android' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v0.2.0-alpha"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --target "$GITHUB_SHA" \
+              --title "FrameMatch Android 0.2 - APK experimental" \
+              --notes "APK de teste (debug). Compilado automaticamente, ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --prerelease
+          fi
