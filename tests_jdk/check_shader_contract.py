@@ -80,6 +80,11 @@ assert 'private void renderCutPreview(int nextClip)' in main
 assert 'setEndPositionMs(ends[k])' in main
 assert 'new VideoView(this)' in main
 assert 'previewPlayer.setOnPreparedListener' in main
-assert 'if(k==1&&zooms.get(idx)!=null)' in main
+assert 'if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(idx)!=null)' in main
+assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f)' in main
+assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f)' in main
+camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read_text(encoding='utf-8')
+assert 'sourceDurationUs-rampUs' in camera and 'peak-(peak-1f)*smooth(t)' in camera
+assert 'cinematicZoomSwitch.setChecked(false)' in main
 assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
 print("Cut preview: two clipped segments, color/geometry and integrated video playback OK")
