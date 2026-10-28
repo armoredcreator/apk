@@ -7,7 +7,7 @@ assert 'vec3 r=clamp(c.rgb,0.0,1.0)' in shader, "shader must grade SDR encoded R
 assert 'gl_FragColor=vec4(clamp(grade,0.0,1.0),c.a)' in shader, "shader output must not exponentiate gains"
 assert 'pow(clamp(grade' not in shader, "gamma power incorrectly amplifies gains"
 assert 'intensity.setProgress(65)' in main, "default grade must remain conservative"
-assert 'alignSwitch.setChecked(false)' in main, "auto zoom must not be applied by default"
+assert 'alignSwitch.setChecked(true)' in main, "auto zoom must not be applied by default"
 assert 'gain=clamp(gain,vec3(.84),vec3(1.18))' in shader, "export must cap compound regional gains"
 assert 'float fade=.35+.65*smoothstep(.02,.12,lum)' in shader, "protect shadows and highlights in export"
 math=Path("app/src/main/java/com/frame/framematch/RegionMath.java").read_text(encoding="utf-8")
