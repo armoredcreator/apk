@@ -10,6 +10,22 @@
 - **Validação:** compilação Android e teste estático de contrato RGB não garantem equivalência visual no aparelho; ainda é obrigatório exportar um par real, avaliar céu, pele, lábios e áudio e comparar com a prévia. Sem teste de dispositivo não classificar como estável.
 
 
+
+## Tentativas por corte — versão 0.4.0-alpha
+
+A correção não depende de vídeos específicos: cada corte entre clipes recebe cinco alternativas geradas automaticamente a partir dos quadros dos próprios arquivos.
+
+- **Original:** mantém as cores sem alteração.
+- **Suave:** reduz os ajustes globais e locais.
+- **Equilibrada:** usa a calibração conservadora do motor.
+- **Priorizar cenário:** privilegia céu azul e ambiente, sem aplicar correção local a pele/lábios.
+- **Priorizar pele:** reduz a correção global, mantém pele/lábios e deixa céu sem ajuste local.
+
+Após clicar **GERAR TENTATIVAS DE COR PARA CADA CORTE**, deslize horizontalmente pelas opções de cada transição. Toque na alternativa desejada: o app recalcula a referência de cor de todos os cortes seguintes sem precisar reler os vídeos ou repetir a detecção facial. O MP4 exportado usa **uma escolha independente por corte**, não apenas a intensidade global.
+
+**Importante:** cada tentativa é uma heurística, não um resultado profissional garantido. As miniaturas usam o motor CPU e a exportação utiliza máscaras equivalentes no shader; pequenas diferenças de renderização do aparelho podem permanecer. A cor escolhida é aplicada de forma estável ao clipe inteiro; o **reenquadramento opcional** é limitado aos primeiros 2,8 segundos. A opção original evita o shader de correção daquele clipe. Os arquivos de entrada são preservados.
+
+
 ## Função e fluxo
 
 1. Selecionar de 2 a 16 vídeos locais, reorganizar e remover clipes.
