@@ -57,7 +57,7 @@ jobs:
             echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
             exit 0
           fi
-          TAG="v0.4.1-alpha"
+          TAG="v0.4.2-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -65,7 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.4.1 - opções e ajustes finos por corte" \
-              --notes "APK debug de teste. Seis opções por transição, regulagem independente por corte e ajuste fino separado de cenário, céu, pele e lábios; zoom desativado por padrão. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --title "FrameMatch Android 0.4.2 - cores ancoradas no Clip 1" \
+              --notes "APK debug de teste. Clip 1 como referencia global de cor para todos os outros clipes sem cascata, seis opções de cor por clip, intensidade individual e enquadramento local opcional. APK experimental: validar no Android. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
               --prerelease
           fi
