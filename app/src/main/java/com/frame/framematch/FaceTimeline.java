@@ -27,6 +27,19 @@ public final class FaceTimeline {
     }
     private final List<Sample> samples=new ArrayList<>();
     public void add(long timeUs,RegionMath.FaceBox b){if(b!=null&&b.valid())samples.add(new Sample(timeUs,b));}
+    /** Adjust face-mask sample timestamps after MediaItem source clipping.
+     * The first retained sample is at t=0; samples before trim are discarded.
+     */
+    public FaceTimeline shifted(long clipStartUs){
+        if(clipStartUs<=0)return this;
+        FaceTimeline result=new FaceTimeline();
+        RegionMath.FaceBox atCut=at(clipStartUs);
+        result.add(0,atCut);
+        for(Sample sample:samples){
+            if(sample.timeUs>clipStartUs)result.add(sample.timeUs-clipStartUs,sample.box);
+        }
+        return result;
+    }
     public int count(){return samples.size();}
     public RegionMath.FaceBox at(long timeUs){
         if(samples.isEmpty())return null;
