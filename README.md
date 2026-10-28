@@ -11,6 +11,14 @@
 
 
 
+## FrameMatch 0.7.0-alpha — corte temporal e cor com consistência entre quadros
+
+- **Clip 1 segue sendo a paleta fixa** para todos os clipes seguintes. O ajuste de cor agora usa três amostras temporais por cena: instante inicial, +0,5 s e +1 s, comparados às amostras perto do fim do Clip 1. Ganhos que oscilam muito são amortecidos; mantém uma gradação estável durante a cena para evitar flicker de cor.
+- **Busca opcional de entrada:** avalia os olhos em 0, 250, 500, 750, 1.000, 1.250 e 1.500 ms no novo clipe. Quando encontra posição/escala/rotação suficientemente próximas do último quadro anterior, seleciona um ponto de entrada e usa Media3 ClippingConfiguration para descartar o início, inclusive o áudio. **Está DESLIGADA por padrão**, porque fala, gesto e efeitos no início poderiam ser perdidos; o usuário deve conferir depois de ligar.
+- O alinhamento facial e as seis alternativas de cor permanecem disponíveis. A comparação 50/50 é somente uma prévia estática; o aplicativo não sintetiza movimentos inexistentes.
+- **Limitação importante:** a gradação permanece fixa em todo o clipe, mas usa evidência temporal para escolhê-la. Não é correção dinâmica por frame nem reconstrução de perspectiva. Não promete transições invisíveis; qualidade precisa ser avaliada no celular.
+- O valor da busca é derivado exclusivamente dos clipes vizinhos. A referência **de cor**, em contraste, permanece exclusivamente o Clip 1.
+
 ## Versão 0.5.0-alpha — Qualidade e naturalidade
 
 **Clip 1 = referência de cor fixa para todos os clipes**, e agora também pode definir o padrão de saída (resolução/proporção, bitrate solicitado e limite de FPS quando disponível). A resolução de referência respeita o teto conservador de 1920 pixels no maior lado, para evitar falhas em Android mais antigo; a codificação H.264/AAC e as limitações do hardware podem alterar os parâmetros solicitados. Uma exportação com os mesmos parâmetros não recupera nitidez de vídeos originalmente piores.
