@@ -35,6 +35,8 @@ import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
 import androidx.media3.transformer.ProgressHolder;
 import androidx.media3.transformer.Transformer;
+import androidx.media3.transformer.DefaultEncoderFactory;
+import androidx.media3.transformer.VideoEncoderSettings;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -71,6 +73,10 @@ public class MainActivity extends Activity {
     private ProgressBar progress;
     private Button addButton, analyzeButton, exportButton, cancelButton;
     private android.widget.CheckBox alignSwitch, regionSwitch;
+    private android.widget.CheckBox matchSizeSwitch, matchBitrateSwitch, matchFpsSwitch;
+    private TextView masterInfo;
+    private Button enableAllButton, batchModeButton;
+    private QualityProfile masterProfile;
     private volatile boolean busy=false, analyzed=false;
     private volatile float analyzedStrength=1f;
     private Transformer transformer;
@@ -99,6 +105,21 @@ public class MainActivity extends Activity {
         alignSwitch.setText("Reenquadramento nos 3s iniciais (experimental; pode causar zoom)");
         alignSwitch.setChecked(false);container.addView(alignSwitch);
         regionSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
+        container.addView(text("QUALIDADE DE EXPORTAÇÃO — CLIP 1 COMO REFERÊNCIA",13,true));
+        masterInfo=text("Adicione o Clip 1 para ver o padrão de qualidade.",12,false);
+        container.addView(masterInfo);
+        matchSizeSwitch=new android.widget.CheckBox(this);
+        matchSizeSwitch.setText("Igualar resolução e proporção ao Clip 1 (com limite de compatibilidade)");
+        matchSizeSwitch.setChecked(true);container.addView(matchSizeSwitch);
+        matchBitrateSwitch=new android.widget.CheckBox(this);
+        matchBitrateSwitch.setText("Solicitar taxa de bits semelhante à do Clip 1");
+        matchBitrateSwitch.setChecked(false);container.addView(matchBitrateSwitch);
+        matchFpsSwitch=new android.widget.CheckBox(this);
+        matchFpsSwitch.setText("Limitar FPS ao do Clip 1 quando for superior (sem inventar quadros)");
+        matchFpsSwitch.setChecked(false);container.addView(matchFpsSwitch);
+        enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
+        container.addView(enableAllButton);
+        container.addView(text("Ativar tudo inclui o zoom experimental. Você pode desligá-lo depois. As 6 alternativas de cor são EXCLUSIVAS; use Ajuste fino para combinar regiões.",12,false));
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         intensity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar b,int p,boolean from){if(from)invalidateAnalysis();}
@@ -108,6 +129,8 @@ public class MainActivity extends Activity {
         container.addView(text("O Clip 1 é a referência de cor fixa para TODOS os próximos clipes. Compare seis tentativas em cada corte e escolha a melhor.",12,false));
         analyzeButton=button("GERAR TENTATIVAS DE COR PARA CADA CORTE",v->analyze());
         container.addView(analyzeButton);
+        batchModeButton=button("APLICAR TENTATIVA DO CORTE 1 → 2 A TODOS",v->applyModeToAll());
+        container.addView(batchModeButton);
         previews=new LinearLayout(this); previews.setOrientation(LinearLayout.VERTICAL);container.addView(previews);
         exportButton=button("UNIR E EXPORTAR MP4",v->prepareExport());container.addView(exportButton);
         cancelButton=button("CANCELAR EXPORTAÇÃO",v->cancelExport());container.addView(cancelButton);
@@ -154,7 +177,7 @@ public class MainActivity extends Activity {
                 clips.add(uri);
                 try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
             }
-            invalidateAnalysis();refresh();
+            invalidateAnalysis();refresh();loadMasterProfile();
         } else if(req==SAVE_VIDEO){
             Uri dest=data.getData(); if(dest==null)return;
             if(clips.contains(dest)){error("O destino não pode ser um vídeo original.");return;}
@@ -175,19 +198,84 @@ public class MainActivity extends Activity {
             LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
             TextView file=text((i+1)+". "+label(clips.get(i)),12,false);
             row.addView(file,new LinearLayout.LayoutParams(0,dp(52),1f));
-            Button up=button("↑",v->{Collections.swap(clips,k,k-1);invalidateAnalysis();refresh();});
+            Button up=button("↑",v->{Collections.swap(clips,k,k-1);invalidateAnalysis();refresh();loadMasterProfile();});
             up.setEnabled(i>0&&!busy);row.addView(up,new LinearLayout.LayoutParams(dp(46),dp(54)));
-            Button down=button("↓",v->{Collections.swap(clips,k,k+1);invalidateAnalysis();refresh();});
+            Button down=button("↓",v->{Collections.swap(clips,k,k+1);invalidateAnalysis();refresh();loadMasterProfile();});
             down.setEnabled(i<clips.size()-1&&!busy);row.addView(down,new LinearLayout.LayoutParams(dp(46),dp(54)));
-            Button del=button("×",v->{clips.remove(k);invalidateAnalysis();refresh();});
+            Button del=button("×",v->{clips.remove(k);invalidateAnalysis();refresh();loadMasterProfile();});
             del.setEnabled(!busy);row.addView(del,new LinearLayout.LayoutParams(dp(46),dp(54)));
             clipList.addView(row);
         }
         addButton.setEnabled(!busy && clips.size()<MAX_CLIPS);
+        enableAllButton.setEnabled(!busy);
+        batchModeButton.setEnabled(!busy && analyzed && clips.size()>=3);
+        matchSizeSwitch.setEnabled(!busy);
+        matchBitrateSwitch.setEnabled(!busy);
+        matchFpsSwitch.setEnabled(!busy);
         analyzeButton.setEnabled(!busy && clips.size()>=2);
         exportButton.setEnabled(!busy && clips.size()>=2);
         intensity.setEnabled(!busy);regionSwitch.setEnabled(!busy);alignSwitch.setEnabled(!busy);
         cancelButton.setVisibility(busy&&transformer!=null?View.VISIBLE:View.GONE);
+    }
+
+    private static int metadataInteger(MediaMetadataRetriever m,int key){
+        try{
+            String v=m.extractMetadata(key);
+            return v==null?0:(int)Math.round(Double.parseDouble(v));
+        }catch(Exception ignored){return 0;}
+    }
+
+    private QualityProfile inspectMaster(Uri uri) throws Exception {
+        MediaMetadataRetriever m=new MediaMetadataRetriever();
+        try{
+            m.setDataSource(this,uri);
+            return QualityProfile.fromMaster(
+                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH),
+                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT),
+                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION),
+                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_BITRATE),
+                metadataInteger(m,MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE));
+        }finally{m.release();}
+    }
+    private void loadMasterProfile(){
+        if(clips.isEmpty()){
+            masterProfile=null;
+            masterInfo.setText("Adicione o Clip 1 para ver o padrão de qualidade.");
+            return;
+        }
+        try{
+            masterProfile=inspectMaster(clips.get(0));
+            masterInfo.setText("Referência: "+masterProfile.describe()+
+                "\\nA qualidade técnica pode ser normalizada, mas detalhes perdidos não são recuperáveis.");
+        }catch(Exception e){
+            masterProfile=null;
+            masterInfo.setText("Metadados do Clip 1 indisponíveis: use a resolução de segurança 540×960.");
+        }
+    }
+    private void enableEverything(){
+        if(busy)return;
+        // Apply independent techniques simultaneously; color LOOKs remain exclusive.
+        boolean changed=!regionSwitch.isChecked()||!alignSwitch.isChecked();
+        regionSwitch.setChecked(true);
+        alignSwitch.setChecked(true);
+        matchSizeSwitch.setChecked(true);
+        matchBitrateSwitch.setChecked(true);
+        matchFpsSwitch.setChecked(true);
+        if(!changed)invalidateAnalysis();
+        say("Todas as correções compatíveis ativadas. Zoom é experimental e só atua no início do clipe.");
+        refresh();
+    }
+    private void applyModeToAll(){
+        if(busy||!analyzed||selectedModes.size()<3)return;
+        int mode=selectedModes.get(1);
+        int strength=cutIntensities.get(1);
+        int[] zones=perCutZones.get(1).clone();
+        for(int i=2;i<selectedModes.size();i++){
+            selectedModes.set(i,mode);
+            cutIntensities.set(i,strength);
+            perCutZones.set(i,zones.clone());
+        }
+        recomputeSelected(1);
     }
     private void analyze(){if(clips.size()<2||busy)return;doAnalysis(false);}
     private void analyzeAndExport(){if(clips.size()<2||busy)return;doAnalysis(true);}
@@ -508,6 +596,14 @@ public class MainActivity extends Activity {
             error("A intensidade mudou. Analise novamente antes de exportar.");return;
         }
         if(outputUri==null)return;
+        if((matchSizeSwitch.isChecked()||matchBitrateSwitch.isChecked()||matchFpsSwitch.isChecked())
+            && masterProfile==null){
+            loadMasterProfile();
+            if(masterProfile==null){
+                error("Não foi possível ler qualidade do Clip 1. Desmarque normalização ou verifique arquivo.");
+                return;
+            }
+        }
         busy=true;refresh();progress.setProgress(0);
         try{
             temporaryOutput=new File(getCacheDir(),"framematch_export_"+System.currentTimeMillis()+".mp4");
@@ -522,14 +618,28 @@ public class MainActivity extends Activity {
                     // Color masks must be evaluated BEFORE moving/zooming the face.
                     if(zooms.get(i)!=null)fx.add(zooms.get(i));
                 }
-                // Common aspect ratio: retain proportions without stretching faces.
-                fx.add(Presentation.createForWidthAndHeight(540,960,Presentation.LAYOUT_SCALE_TO_FIT));
+                // Match master proportions without stretching pixels. Old 540x960 when disabled.
+                int[] outputSize=masterProfile==null?new int[]{540,960}:
+                    masterProfile.outputSize(matchSizeSwitch.isChecked());
+                fx.add(Presentation.createForWidthAndHeight(outputSize[0],outputSize[1],
+                    Presentation.LAYOUT_SCALE_TO_FIT));
+                // Media3 only CAPS a higher source frame rate; it does not invent extra frames.
+                if(masterProfile!=null && matchFpsSwitch.isChecked()
+                    && masterProfile.frameRateCeiling(true)>0)
+                    item.setFrameRate(masterProfile.frameRateCeiling(true));
                 item.setEffects(new Effects(Collections.emptyList(),fx));
                 edits.add(item.build());
             }
             EditedMediaItemSequence sequence=EditedMediaItemSequence.withAudioAndVideoFrom(edits);
             Composition composition=new Composition.Builder(sequence).build();
-            transformer=new Transformer.Builder(this)
+            Transformer.Builder exportBuilder=new Transformer.Builder(this);
+            if(matchBitrateSwitch.isChecked() && masterProfile!=null){
+                exportBuilder.setEncoderFactory(new DefaultEncoderFactory.Builder(this)
+                    .setRequestedVideoEncoderSettings(new VideoEncoderSettings.Builder()
+                        .setBitrate(masterProfile.requestedBitrate).build())
+                    .build());
+            }
+            transformer=exportBuilder
                 .setVideoMimeType(MimeTypes.VIDEO_H264)
                 .setAudioMimeType(MimeTypes.AUDIO_AAC)
                 .addListener(new Transformer.Listener(){
