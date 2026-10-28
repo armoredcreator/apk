@@ -80,13 +80,14 @@ public class MainActivity extends Activity {
         addButton=button("+ ADICIONAR VÍDEOS",v->pick()); container.addView(addButton);
         clipList=new LinearLayout(this); clipList.setOrientation(LinearLayout.VERTICAL);container.addView(clipList);
         container.addView(text("Intensidade da correção (0–100%)",13,true));
-        intensity=new SeekBar(this);intensity.setMax(100);intensity.setProgress(100);container.addView(intensity);
+        intensity=new SeekBar(this);intensity.setMax(100);intensity.setProgress(65);container.addView(intensity);
+        container.addView(text("65% inicial: correção moderada. A cor permanece estável em todo o clipe; só o alinhamento é limitado aos 3s iniciais.",12,false));
         regionSwitch=new android.widget.CheckBox(this);
         regionSwitch.setText("Corrigir céu, pele, lábios e cenário separadamente (GPU)");
         regionSwitch.setChecked(true);container.addView(regionSwitch);
         alignSwitch=new android.widget.CheckBox(this);
-        alignSwitch.setText("Reenquadramento progressivo quando movimento compatível");
-        alignSwitch.setChecked(true);container.addView(alignSwitch);
+        alignSwitch.setText("Reenquadramento nos 3s iniciais (experimental; pode causar zoom)");
+        alignSwitch.setChecked(false);container.addView(alignSwitch);
         regionSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         intensity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
