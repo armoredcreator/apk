@@ -14,7 +14,9 @@ math=Path("app/src/main/java/com/frame/framematch/RegionMath.java").read_text(en
 assert 'gain=clamp(gain,.84f,1.18f)' in math, "preview must use identical bounds"
 assert 'float fade=.35f+.65f*smoothstep(.02f,.12f,lum)' in math, "preview needs tonal protection"
 assert 'blendStable' in math and 'compact(frameOffset(uri,false,(selectedOffset+500)*1000L))' in main, "early boundary sample is missing"
-assert 'release=2_800_000L' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
+assert 'cutPlan' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
+assert 'beforeCut' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
+assert 'afterCut' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
 choices=Path("app/src/main/java/com/frame/framematch/MatchChoices.java").read_text(encoding="utf-8")
 assert 'public static final int COUNT=6' in choices
 assert 'scaled(calibrated,.45f,.45f,.45f,.45f)' in choices
@@ -58,7 +60,7 @@ face=Path("app/src/main/java/com/frame/framematch/FaceTimeline.java").read_text(
 zoom=Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
 assert 'setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)' in face
 assert 'FaceLandmark.LEFT_EYE' in face and 'FaceLandmark.RIGHT_EYE' in face
-assert 'ContinuityZoom.facePlan(' in main
+assert 'ContinuityZoom.cutPlan(' in main
 assert 'lastLandmarks.get(i-1),firstLandmarks.get(i)' in main
 assert 'AlignmentMath.estimate' in zoom
 assert 'Math.abs(tx)>.16f||Math.abs(ty)>.16f' in align
@@ -80,6 +82,7 @@ assert 'private void renderCutPreview(int nextClip)' in main
 assert 'setEndPositionMs(ends[k])' in main
 assert 'new VideoView(this)' in main
 assert 'previewPlayer.setOnPreparedListener' in main
+assert 'if(k==0&&preZooms.get(idx)!=null)' in main
 assert 'if(k==1&&zooms.get(idx)!=null)' in main
 assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
 print("Cut preview: two clipped segments, color/geometry and integrated video playback OK")
