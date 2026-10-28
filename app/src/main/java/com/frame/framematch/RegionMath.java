@@ -139,7 +139,8 @@ public final class RegionMath {
         float dx=(x-cx)/rx,dy=(y-cy)/ry;
         return 1f-smoothstep(.75f,1.18f,dx*dx+dy*dy);
     }
-    private static float[] maskWeights(int pixel,float x,float y,FaceBox f) {
+    private static int adjusted(int pixel,float x,float y,FaceBox f,
+                                float[] base,float[] sky,float[] skin,float[] lips) {
         float r=((pixel>>16)&255)/255f,g=((pixel>>8)&255)/255f,b=(pixel&255)/255f;
         float lum=.299f*r+.587f*g+.114f*b;
         float cr=.5f+.713f*(r-lum),cb=.5f+.564f*(b-lum);
@@ -147,16 +148,12 @@ public final class RegionMath {
             *smoothstep(.29f,.32f,cb)*(1-smoothstep(.53f,.56f,cb));
         float isSky=smoothstep(.035f,.10f,b-r)*smoothstep(.014f,.07f,b-g)
             *smoothstep(.12f,.20f,b);
-        float face=0f,lips=0f;
+        float face=0f,lip=0f;
         if(f!=null && f.valid()) {
             face=ovalWeight(x,y,f.x+.5f*f.w,f.y+.49f*f.h,.48f*f.w,.48f*f.h)*isSkin;
-            lips=ovalWeight(x,y,f.x+.5f*f.w,f.y+.75f*f.h,.23f*f.w,.10f*f.h)*isSkin;
+            lip=ovalWeight(x,y,f.x+.5f*f.w,f.y+.75f*f.h,.23f*f.w,.10f*f.h)*isSkin;
         }
-        return new float[]{isSky*(1f-face),face*(1f-lips),lips,lum};
-    }
-    private static int adjusted(int pixel,float[] base,float[] sky,float[] skin,float[] lips,
-                                float[] weights) {
-        float lum=weights[3];
+        float skyWeight=isSky*(1f-face), skinWeight=face*(1f-lip);
         float fade=.35f+.65f*smoothstep(.02f,.12f,lum)
                 *(1f-smoothstep(.84f,.98f,lum));
         int argb=pixel&0xff000000;
@@ -164,26 +161,26 @@ public final class RegionMath {
             int bit=(2-c)*8;
             float raw=(pixel>>bit)&255;
             float gain=base[c]
-                    *(1f+(sky[c]-1f)*weights[0])
-                    *(1f+(skin[c]-1f)*weights[1])
-                    *(1f+(lips[c]-1f)*weights[2]);
-            // Global and regional multipliers must not amplify each other unchecked.
+                    *(1f+(sky[c]-1f)*skyWeight)
+                    *(1f+(skin[c]-1f)*skinWeight)
+                    *(1f+(lips[c]-1f)*lip);
+            // Avoid strongly multiplying global and regional color corrections.
             gain=clamp(gain,.84f,1.18f);
             int result=Math.round(clamp(raw*(1f+(gain-1f)*fade),0,255));
             argb|=result<<bit;
         }
         return argb;
     }
+
     /** CPU preview uses the same soft masks, gain limits and tonal protection as the shader. */
     public static int[] preview(int[] source,int width,int height,FaceBox face,Plan plan){
         int[] dst=source.clone();
         for(int i=0;i<dst.length;i++){
             float x=(i%width+.5f)/width,y=(i/width+.5f)/height;
-            float[] weights=maskWeights(source[i],x,y,face);
-            dst[i]=adjusted(source[i],plan.gains[0],
+            dst[i]=adjusted(source[i],x,y,face,plan.gains[0],
                     plan.calibrated[SKY]?plan.gains[SKY]:ONE,
                     plan.calibrated[SKIN]?plan.gains[SKIN]:ONE,
-                    plan.calibrated[LIPS]?plan.gains[LIPS]:ONE,weights);
+                    plan.calibrated[LIPS]?plan.gains[LIPS]:ONE);
         }
         return dst;
     }
