@@ -3,6 +3,8 @@ package com.frame.framematch;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
@@ -67,6 +69,7 @@ public class MainActivity extends Activity {
     private final ArrayList<Bitmap> firstFrames=new ArrayList<>(), lastFrames=new ArrayList<>();
     private final ArrayList<Bitmap> earlyFrames=new ArrayList<>(), nearEndFrames=new ArrayList<>();
     private final ArrayList<RegionMath.FaceBox> endFaces=new ArrayList<>();
+    private final ArrayList<AlignmentMath.Pose> startPoses=new ArrayList<>(), endPoses=new ArrayList<>();
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private LinearLayout clipList, container, previews;
@@ -75,6 +78,7 @@ public class MainActivity extends Activity {
     private ProgressBar progress;
     private Button addButton, analyzeButton, exportButton, cancelButton;
     private android.widget.CheckBox alignSwitch, regionSwitch;
+    private SeekBar faceDuration,faceStrength;
     private android.widget.CheckBox matchSizeSwitch, matchBitrateSwitch, matchFpsSwitch;
     private TextView masterInfo;
     private Button enableAllButton, batchModeButton, naturalButton;
@@ -104,8 +108,23 @@ public class MainActivity extends Activity {
         regionSwitch.setText("Corrigir céu, pele, lábios e cenário separadamente (GPU)");
         regionSwitch.setChecked(true);container.addView(regionSwitch);
         alignSwitch=new android.widget.CheckBox(this);
-        alignSwitch.setText("Reenquadramento nos 3s iniciais (experimental; pode causar zoom)");
+        alignSwitch.setText("Encaixe facial automático por olhos entre clipes consecutivos (experimental)");
         alignSwitch.setChecked(false);container.addView(alignSwitch);
+        container.addView(text("Força do encaixe facial (0–100%)",12,true));
+        faceStrength=new SeekBar(this);faceStrength.setMax(100);faceStrength.setProgress(70);
+        container.addView(faceStrength);
+        container.addView(text("Duração do retorno ao original (0,5 a 3 segundos)",12,true));
+        faceDuration=new SeekBar(this);faceDuration.setMax(2500);faceDuration.setProgress(1500);
+        container.addView(faceDuration);
+        SeekBar.OnSeekBarChangeListener faceChanged=new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
+                if(fromUser)invalidateAnalysis();
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar){}
+            @Override public void onStopTrackingTouch(SeekBar bar){}
+        };
+        faceStrength.setOnSeekBarChangeListener(faceChanged);
+        faceDuration.setOnSeekBarChangeListener(faceChanged);
         regionSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         container.addView(text("QUALIDADE DE EXPORTAÇÃO — CLIP 1 COMO REFERÊNCIA",13,true));
         masterInfo=text("Adicione o Clip 1 para ver o padrão de qualidade.",12,false);
@@ -194,7 +213,7 @@ public class MainActivity extends Activity {
     private void invalidateAnalysis(){
         analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
         selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
-        nearEndFrames.clear();endFaces.clear();previews.removeAllViews();
+        nearEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();previews.removeAllViews();
     }
     private void refresh(){
         clipList.removeAllViews();
@@ -221,6 +240,7 @@ public class MainActivity extends Activity {
         analyzeButton.setEnabled(!busy && clips.size()>=2);
         exportButton.setEnabled(!busy && clips.size()>=2);
         intensity.setEnabled(!busy);regionSwitch.setEnabled(!busy);alignSwitch.setEnabled(!busy);
+        faceStrength.setEnabled(!busy);faceDuration.setEnabled(!busy);
         cancelButton.setVisibility(busy&&transformer!=null?View.VISIBLE:View.GONE);
     }
 
@@ -333,6 +353,8 @@ public class MainActivity extends Activity {
     private MatchResult computeChoices(ArrayList<Bitmap> firsts,ArrayList<Bitmap> lasts,
                                        ArrayList<Bitmap> earlys,ArrayList<Bitmap> ends,
                                        ArrayList<RegionMath.FaceBox> lastFaces,
+                                       ArrayList<AlignmentMath.Pose> firstLandmarks,
+                                       ArrayList<AlignmentMath.Pose> lastLandmarks,
                                        ArrayList<FaceTimeline> faceTracks,
                                        ArrayList<Integer> modes,ArrayList<Integer> strengths,
                                        ArrayList<int[]> zones,float strength,
@@ -379,21 +401,26 @@ public class MainActivity extends Activity {
             output.variants.add(choices);
             output.selected.add(choices[mode]);
 
-            ContinuityZoom zoom=align?ContinuityZoom.plan(timeline,adjacentFace):null;
+            ContinuityZoom zoom=align?ContinuityZoom.facePlan(
+                lastLandmarks.get(i-1),firstLandmarks.get(i),
+                faceStrength.getProgress()/100f,500L+faceDuration.getProgress()):null;
             output.alignments.add(zoom);
 
             // The two references are intentionally different: master colors vs. local cut.
             Bitmap previousPreview=i==1?lasts.get(0)
                 :grade(lasts.get(i-1),output.selected.get(i-1),adjacentFace);
-            Bitmap[] previews=new Bitmap[3+MatchChoices.COUNT];
+            Bitmap[] previews=new Bitmap[4+MatchChoices.COUNT];
             previews[0]=small(masterLast);
             previews[1]=small(previousPreview);
             previews[2]=small(target);
+            Bitmap aligned=zoom==null?target:zoom.preview(target);
+            Bitmap overlap=overlay(previews[1],small(aligned));
+            previews[3]=overlap;
             for(int m=0;m<MatchChoices.COUNT;m++){
                 Bitmap p=m==MatchChoices.ORIGINAL?target:grade(target,choices[m],firstFace);
                 if(zoom!=null)p=zoom.preview(p);
-                previews[3+m]=small(p);
-                if(p!=target && p!=previews[3+m] && !p.isRecycled())p.recycle();
+                previews[4+m]=small(p);
+                if(p!=target && p!=previews[4+m] && !p.isRecycled())p.recycle();
             }
             output.previewRows.add(previews);
             if(i>1 && !previousPreview.isRecycled())previousPreview.recycle();
@@ -450,7 +477,7 @@ public class MainActivity extends Activity {
         worker.submit(()->{
             try{
                 MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,
-                    endFaces,tracks,selections,strengths,zones,strength,regional,align);
+                    endFaces,startPoses,endPoses,tracks,selections,strengths,zones,strength,regional,align);
                 main.post(()->{if(!ended)installResult(result);});
             }catch(Exception e){main.post(()->{
                 busy=false;analyzed=false;refresh();
@@ -472,6 +499,7 @@ public class MainActivity extends Activity {
                 ArrayList<Bitmap> firsts=new ArrayList<>(), lasts=new ArrayList<>();
                 ArrayList<Bitmap> earlys=new ArrayList<>(), ends=new ArrayList<>();
                 ArrayList<RegionMath.FaceBox> faces=new ArrayList<>();
+                ArrayList<AlignmentMath.Pose> beginPose=new ArrayList<>(),finalPose=new ArrayList<>();
                 ArrayList<FaceTimeline> nextTracks=new ArrayList<>();
                 ArrayList<Integer> modes=new ArrayList<>();
                 ArrayList<Integer> strengths=new ArrayList<>();
@@ -479,8 +507,11 @@ public class MainActivity extends Activity {
                 for(int i=0;i<selected.size();i++){
                     Uri uri=selected.get(i);
                     Bitmap last=frame(uri,true);
+                    Bitmap first=frame(uri,false);
                     RegionMath.FaceBox lastFace=FaceTimeline.detect(detector,last);
-                    firsts.add(compact(frame(uri,false)));
+                    finalPose.add(FaceTimeline.pose(detector,last));
+                    beginPose.add(FaceTimeline.pose(detector,first));
+                    firsts.add(compact(first));
                     lasts.add(compact(last));
                     earlys.add(compact(frameOffset(uri,false,500_000L)));
                     ends.add(compact(frameOffset(uri,true,500_000L)));
@@ -493,7 +524,7 @@ public class MainActivity extends Activity {
                     main.post(()->{progress.setProgress(progressIndex*50/selected.size());
                         say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
-                MatchResult result=computeChoices(firsts,lasts,earlys,ends,faces,nextTracks,
+                MatchResult result=computeChoices(firsts,lasts,earlys,ends,faces,beginPose,finalPose,nextTracks,
                     modes,strengths,zones,strength,regional,align);
                 main.post(()->{
                     if(ended)return;
@@ -502,6 +533,8 @@ public class MainActivity extends Activity {
                     earlyFrames.clear();earlyFrames.addAll(earlys);
                     nearEndFrames.clear();nearEndFrames.addAll(ends);
                     endFaces.clear();endFaces.addAll(faces);
+                    startPoses.clear();startPoses.addAll(beginPose);
+                    endPoses.clear();endPoses.addAll(finalPose);
                     tracks.clear();tracks.addAll(nextTracks);
                     selectedModes.clear();selectedModes.addAll(modes);
                     cutIntensities.clear();cutIntensities.addAll(strengths);
@@ -513,6 +546,15 @@ public class MainActivity extends Activity {
                 error("Não foi possível analisar as cenas: "+e.getMessage());});
             }finally{detector.close();}
         });
+    }
+    /** 50/50 onion-skin comparison for adjacent frames, never inserted into the MP4. */
+    private Bitmap overlay(Bitmap previous,Bitmap next){
+        Bitmap layer=Bitmap.createBitmap(previous.getWidth(),previous.getHeight(),Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(layer);canvas.drawBitmap(previous,0,0,null);
+        Paint alpha=new Paint(Paint.FILTER_BITMAP_FLAG);alpha.setAlpha(128);
+        canvas.drawBitmap(next,null,
+            new android.graphics.Rect(0,0,layer.getWidth(),layer.getHeight()),alpha);
+        return layer;
     }
     private Bitmap small(Bitmap bmp){
         int w=144,h=Math.max(2,Math.round(bmp.getHeight()*144f/bmp.getWidth()));
@@ -564,6 +606,10 @@ public class MainActivity extends Activity {
                 comparison.addView(column,new LinearLayout.LayoutParams(0,-2,1f));
             }
             previews.addView(comparison);
+            previews.addView(text("Sobreposição 50/50 do último frame anterior + primeiro frame alinhado:",11,true));
+            ImageView alignedOverlay=new ImageView(this);
+            alignedOverlay.setImageBitmap(pictures[3]);alignedOverlay.setAdjustViewBounds(true);
+            previews.addView(alignedOverlay,new LinearLayout.LayoutParams(-1,dp(210)));
             previews.addView(button("AUTO NATURAL — recomendar para este corte",
                 v->chooseColor(clipIndex,-1)));
             HorizontalScrollView scroll=new HorizontalScrollView(this);
@@ -575,7 +621,7 @@ public class MainActivity extends Activity {
                 card.setOrientation(LinearLayout.VERTICAL);
                 card.setPadding(dp(3),dp(4),dp(3),dp(5));
                 ImageView image=new ImageView(this);
-                image.setImageBitmap(pictures[3+m]);
+                image.setImageBitmap(pictures[4+m]);
                 image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                 card.addView(image,new LinearLayout.LayoutParams(dp(126),dp(210)));
                 boolean marked=selectedModes.get(clipIndex)==m;
