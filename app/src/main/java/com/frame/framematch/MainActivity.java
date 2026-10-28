@@ -151,9 +151,9 @@ public class MainActivity extends Activity {
         matchFpsSwitch.setChecked(false);container.addView(matchFpsSwitch);
         enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
         container.addView(enableAllButton);
-        container.addView(text("Ativar tudo inclui o zoom experimental. Você pode desligá-lo depois. As 6 alternativas de cor são EXCLUSIVAS; use Ajuste fino para combinar regiões.",12,false));
+        container.addView(text("Ativar tudo NÃO habilita o zoom automaticamente. As 6 alternativas de cor são exclusivas; use Ajuste fino para combinar regiões.",12,false));
         cinematicZoomSwitch=new android.widget.CheckBox(this);
-        cinematicZoomSwitch.setText("ZOOM V37 (apenas 2 clipes): 33% nos 3s antes do corte, recuo até o fim (opcional)");
+        cinematicZoomSwitch.setText("ZOOM CINEMATOGRÁFICO EXPERIMENTAL (2 clipes): 33%, 3s antes da união, recuo completo. Ainda NÃO equivale à V39 aprovada.");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
         cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
@@ -324,7 +324,7 @@ public class MainActivity extends Activity {
         matchBitrateSwitch.setChecked(true);
         matchFpsSwitch.setChecked(true);
         if(!changed)invalidateAnalysis();
-        say("Todas as correções compatíveis ativadas. Zoom é experimental e só atua no início do clipe.");
+        say("Correções compatíveis ativadas. Zoom cinematográfico continua opcional e NÃO foi habilitado automaticamente.");
         refresh();
     }
     private void autoNaturalAll(){
@@ -730,7 +730,7 @@ public class MainActivity extends Activity {
                     });
                 }
             }
-            previews.addView(button("▶ PRÉVIA DESTA TRANSIÇÃO (aprox. 4 segundos)",
+            previews.addView(button("▶ PRÉVIA REAL: 3s antes + cena seguinte completa", 
                 v->renderCutPreview(clipIndex)));
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
                 " · Referência de cor fixa no Clip 1. Outros cortes não mudam.",11,false));
@@ -754,10 +754,11 @@ public class MainActivity extends Activity {
         }
         try{
             long duration=durationMs(clips.get(nextClip-1));
-            long previousStart=Math.max(nextClip==1?0:entryOffsetsMs.get(nextClip-1),duration-1500);
+            long previousStart=PreviewWindow.beforeStart(duration,
+                nextClip==1?0:entryOffsetsMs.get(nextClip-1));
             long nextStart=entryOffsetsMs.get(nextClip);
             long nextDuration=durationMs(clips.get(nextClip));
-            long nextEnd=Math.min(nextDuration,nextStart+2500);
+            long nextEnd=nextDuration; // O recuo e a cor precisam ser avaliados até o último quadro.
             if(duration<=previousStart||nextEnd<=nextStart)throw new Exception("Cenas curtas demais para prévia");
             busy=true;previewRendering=true;refresh();progress.setProgress(0);
             previewOutput=new File(getCacheDir(),"framematch_preview.mp4");
@@ -817,7 +818,7 @@ public class MainActivity extends Activity {
                         previewRendering=false;endExport("Falha ao gerar prévia: "+e.getMessage());
                     }
                 }).build();
-            say("Gerando prévia curta somente deste corte, com as correções selecionadas...");
+            say("Gerando prévia da aproximação completa e da cena seguinte inteira...");
             transformer.start(composition,previewOutput.getAbsolutePath());
             trackProgress();
         }catch(Exception e){previewRendering=false;endExport("Falha na prévia: "+e.getMessage());}
