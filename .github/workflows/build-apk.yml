@@ -57,7 +57,7 @@ jobs:
             echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
             exit 0
           fi
-          TAG="v0.7.0-alpha"
+          TAG="v0.8.0-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -65,7 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.7.0 - busca temporal e cor em 3 amostras" \
-              --notes "APK debug de teste. Busca de melhor entrada opcional ate 1,5 s e consenso temporal de cor em 3 amostras ancorado no Clip 1. O corte pode eliminar audio inicial; desativado por padrao. APK experimental, nao validado em dispositivo real. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --title "FrameMatch Android 0.8.0 - prévia curta por transição" \
+              --notes "APK debug de teste. Geração e reprodução de prévia MP4 curta por corte, com correções de cor e encaixe, antes de exportar toda a sequência. APK experimental; validação em celular real necessária. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
               --prerelease
           fi
