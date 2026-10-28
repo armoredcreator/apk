@@ -21,7 +21,7 @@ public final class AlignmentMath {
         float factor=RegionMath.clamp(strength,0,1);
         float desired=reference.eyeDistance/target.eyeDistance;
         // prevent aggressive zoom and distorted crops
-        if(desired<.82f||desired>1.20f)return Transform.identity();
+        if(desired<1.01f||desired>1.20f)return Transform.identity();
         float angle=reference.angle-target.angle;
         if(Math.abs(angle)>.11f)return Transform.identity(); // ~6 degrees
         float z=1+(desired-1)*factor;
@@ -33,6 +33,9 @@ public final class AlignmentMath {
         float ty=refY-z*(sin*targetX+cos*targetY);
         // Large translations cause black edges, slipping background and unnatural movement.
         if(Math.abs(tx)>.16f||Math.abs(ty)>.16f)return Transform.identity();
+        // Preserve full-frame coverage: otherwise the affine movement creates black borders.
+        float safeMargin=z-1f;
+        if(Math.abs(tx)>safeMargin||Math.abs(ty)>safeMargin)return Transform.identity();
         return new Transform(z,tx,ty,rot);
     }
     public static float fade(long timeUs,long releaseUs){
