@@ -196,6 +196,11 @@ public class MainActivity extends Activity {
                 for(int i=1;i<selected.size();i++){
                     Bitmap first=frame(selected.get(i),false);
                     Bitmap last=previousLast;
+                    // A second close-by observation reduces influence of one anomalous boundary frame.
+                    // Do not use frames beyond 3 s for continuity calibration.
+                    Bitmap referenceNearEnd=frameOffset(selected.get(i-1),true,500_000L);
+                    if(i>1)referenceNearEnd=grade(referenceNearEnd,nextPlans.get(i-1),lastFace);
+                    Bitmap targetEarly=frameOffset(selected.get(i),false,500_000L);
                     // Scan entire target at bounded sampling, keep a stable region plan for every frame.
                     FaceTimeline timeline=FaceTimeline.scan(this,selected.get(i),Long.MAX_VALUE,detector);
                     RegionMath.FaceBox targetFirst=timeline.first();
@@ -203,6 +208,13 @@ public class MainActivity extends Activity {
                         pixels(last),last.getWidth(),last.getHeight(),lastFace,
                         pixels(first),first.getWidth(),first.getHeight(),targetFirst,strength)
                         : RegionMath.Plan.identity();
+                    if(regional){
+                        RegionMath.FaceBox earlyFace=timeline.at(500_000L);
+                        RegionMath.Plan earlyMatch=RegionMath.analyze(
+                            pixels(referenceNearEnd),referenceNearEnd.getWidth(),referenceNearEnd.getHeight(),lastFace,
+                            pixels(targetEarly),targetEarly.getWidth(),targetEarly.getHeight(),earlyFace,strength);
+                        match=RegionMath.blendStable(match,earlyMatch);
+                    }
                     nextPlans.add(match);nextTracks.add(timeline);
                     ContinuityZoom zoom=align?ContinuityZoom.plan(timeline,lastFace):null;
                     nextZooms.add(zoom);
@@ -239,11 +251,15 @@ public class MainActivity extends Activity {
         return Bitmap.createScaledBitmap(bmp,w,h,true);
     }
     private Bitmap frame(Uri uri,boolean last) throws Exception {
+        return frameOffset(uri,last,0L);
+    }
+    private Bitmap frameOffset(Uri uri,boolean last,long offsetUs) throws Exception {
         MediaMetadataRetriever retriever=new MediaMetadataRetriever();
         try{
             retriever.setDataSource(this,uri);
             long ms=Long.parseLong(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
-            long at=last?Math.max(0,ms*1000L-42000L):0L;
+            long durationUs=ms*1000L;
+            long at=last?Math.max(0,durationUs-42000L-offsetUs):Math.min(Math.max(0,durationUs-1),offsetUs);
             Bitmap bmp=retriever.getFrameAtTime(at,MediaMetadataRetriever.OPTION_CLOSEST);
             if(bmp==null)throw new Exception("Não foi possível decodificar o quadro de "+label(uri));
             int w=Math.min(480,bmp.getWidth());
