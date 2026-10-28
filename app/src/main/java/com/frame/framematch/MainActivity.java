@@ -365,22 +365,51 @@ public class MainActivity extends Activity {
         int[] c=RegionMath.preview(pixels(bmp),bmp.getWidth(),bmp.getHeight(),face,plan);
         return Bitmap.createBitmap(c,bmp.getWidth(),bmp.getHeight(),Bitmap.Config.ARGB_8888);
     }
-    private void renderPreviews(ArrayList<Bitmap[]> triplets){
+    private void renderPreviews(ArrayList<Bitmap[]> rows){
         previews.removeAllViews();
-        for(int i=0;i<triplets.size();i++){
-            previews.addView(text("Corte "+(i+1)+" → "+(i+2)+" | correção por regiões",12,true));
-            LinearLayout line=new LinearLayout(this);
-            Bitmap[] trio=triplets.get(i);
-            String[] names={"Último anterior","Primeiro original","Primeiro corrigido"};
-            for(int j=0;j<3;j++){
-                LinearLayout column=new LinearLayout(this);column.setOrientation(LinearLayout.VERTICAL);
-                ImageView view=new ImageView(this);view.setImageBitmap(trio[j]);view.setAdjustViewBounds(true);
-                view.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                column.addView(view,new LinearLayout.LayoutParams(-1,dp(142)));
-                TextView caption=text(names[j],10,false);caption.setGravity(Gravity.CENTER);
-                column.addView(caption);line.addView(column,new LinearLayout.LayoutParams(0,-2,1f));
+        for(int i=0;i<rows.size();i++){
+            final int clipIndex=i+1;
+            Bitmap[] pictures=rows.get(i);
+            previews.addView(text("CORTE "+clipIndex+" → "+(clipIndex+1)+
+                " | escolha a tentativa que mais combina com o fim do anterior",13,true));
+            LinearLayout comparison=new LinearLayout(this);
+            comparison.setOrientation(LinearLayout.HORIZONTAL);
+            String[] labels={"Fim anterior","Início original"};
+            for(int j=0;j<2;j++){
+                LinearLayout column=new LinearLayout(this);
+                column.setOrientation(LinearLayout.VERTICAL);
+                ImageView image=new ImageView(this);
+                image.setImageBitmap(pictures[j]);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                column.addView(image,new LinearLayout.LayoutParams(-1,dp(175)));
+                TextView caption=text(labels[j],11,false);caption.setGravity(Gravity.CENTER);
+                column.addView(caption);
+                comparison.addView(column,new LinearLayout.LayoutParams(0,-2,1f));
             }
-            previews.addView(line);
+            previews.addView(comparison);
+            HorizontalScrollView scroll=new HorizontalScrollView(this);
+            LinearLayout variants=new LinearLayout(this);
+            variants.setOrientation(LinearLayout.HORIZONTAL);
+            for(int m=0;m<MatchChoices.COUNT;m++){
+                final int choice=m;
+                LinearLayout card=new LinearLayout(this);
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setPadding(dp(3),dp(4),dp(3),dp(5));
+                ImageView image=new ImageView(this);
+                image.setImageBitmap(pictures[2+m]);
+                image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                card.addView(image,new LinearLayout.LayoutParams(dp(126),dp(210)));
+                boolean marked=selectedModes.get(clipIndex)==m;
+                Button action=button((marked?"✓ ":"")+MatchChoices.LABELS[m],
+                    v->chooseColor(clipIndex,choice));
+                action.setEnabled(!busy&&!marked);
+                action.setTextSize(11);
+                card.addView(action,new LinearLayout.LayoutParams(dp(144),dp(55)));
+                variants.addView(card);
+            }
+            scroll.addView(variants);
+            previews.addView(scroll);
+            previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
+                " · As cenas seguintes são recalibradas se esta opção mudar.",11,false));
         }
     }
 
@@ -406,7 +435,8 @@ public class MainActivity extends Activity {
                 EditedMediaItem.Builder item=new EditedMediaItem.Builder(MediaItem.fromUri(clips.get(i)));
                 ArrayList<androidx.media3.common.Effect> fx=new ArrayList<>();
                 if(i>0){
-                    if(regionSwitch.isChecked())fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
+                    if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
+                        fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
                     if(zooms.get(i)!=null)fx.add(zooms.get(i));
                 }
