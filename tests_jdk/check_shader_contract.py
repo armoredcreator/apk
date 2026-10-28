@@ -8,5 +8,11 @@ assert 'gl_FragColor=vec4(clamp(grade,0.0,1.0),c.a)' in shader, "shader output m
 assert 'pow(clamp(grade' not in shader, "gamma power incorrectly amplifies gains"
 assert 'intensity.setProgress(65)' in main, "default grade must remain conservative"
 assert 'alignSwitch.setChecked(false)' in main, "auto zoom must not be applied by default"
+assert 'gain=clamp(gain,vec3(.84),vec3(1.18))' in shader, "export must cap compound regional gains"
+assert 'float fade=.35+.65*smoothstep(.02,.12,lum)' in shader, "protect shadows and highlights in export"
+math=Path("app/src/main/java/com/frame/framematch/RegionMath.java").read_text(encoding="utf-8")
+assert 'gain=clamp(gain,.84f,1.18f)' in math, "preview must use identical bounds"
+assert 'float fade=.35f+.65f*smoothstep(.02f,.12f,lum)' in math, "preview needs tonal protection"
+assert 'blendStable' in math and 'frameOffset(selected.get(i),false,500_000L)' in main, "early boundary sample is missing"
 assert 'release=2_800_000L' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
 print("Shader SDR / CPU-preview equivalence contract: OK")
