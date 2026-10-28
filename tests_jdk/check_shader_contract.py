@@ -84,10 +84,14 @@ assert 'if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(
 assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f)' in main
 assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f)' in main
 camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read_text(encoding='utf-8')
-assert 'sourceDurationUs-rampUs' in camera, "camera approach must begin 3s before the cut"
-assert 'v37Return(t)' in camera and 'return 1f+(peak-1f)*v37Return(t)' in camera, "camera recede must follow measured V37 trajectory"
-assert 'peak-(peak-1f)*smooth(t)' not in camera, "obsolete generic recede reintroduced"
-assert 'RETURN_RATIO' in camera and 'derivative(int i)' in camera, "continuous monotone V37 return is missing"
+# Experimental V39-target implementation: source timeline and ONE smooth recede.
+# Numeric continuity, monotonicity, cut-scale parity and end frame are checked
+# frame-by-frame by ZoomTimelineSelfTest.java (not by brittle source strings).
+assert 'ZoomTimeline.approach(sourceUs, durationUs, 3_000_000L, peak)' in camera, "approach must start 3s before the cut"
+assert 'ZoomTimeline.recede(sourceUs, durationUs, peak)' in camera, "camera must use a single recede trajectory"
+assert 'RETURN_RATIO' not in camera and 'v37Return' not in camera, "old segmented return table was reintroduced"
+assert 'alvo V39' in main, "Android UI must identify V39 as visual target"
+assert 'pixel-equivalent' in camera, "do not claim unverified desktop V39 parity"
 assert 'cinematicZoomSwitch.setChecked(false)' in main
 assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
 print("Cut preview: two clipped segments, color/geometry and integrated video playback OK")
