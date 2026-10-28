@@ -57,7 +57,7 @@ jobs:
             echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
             exit 0
           fi
-          TAG="v0.5.0-alpha"
+          TAG="v0.6.0-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -65,7 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.5.0 - Auto Natural e qualidade do Clip 1" \
-              --notes "APK debug de teste. Clip 1 como referencia global de cor, selecao conservadora Auto Natural por cena e opcoes de qualidade tecnica (resolucao, bitrate solicitado, limite FPS). APK experimental: validacao em videos reais no Android ainda necessaria. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --title "FrameMatch Android 0.6.0 - continuidade facial por olhos" \
+              --notes "APK debug de teste. Alinhamento facial conservador por olhos entre clipes vizinhos, sobreposicao 50/50 para conferencia, forca e duracao ate 3s; cor sempre pelo Clip 1. Experimental: nao validado em dispositivo real. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
               --prerelease
           fi
