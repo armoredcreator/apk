@@ -562,7 +562,8 @@ public class MainActivity extends Activity {
                     later.add(compact(frameOffset(uri,false,(selectedOffset+1000)*1000L)));
                     earlierEnds.add(compact(frameOffset(uri,true,1_000_000L)));
                     faces.add(lastFace);
-                    nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector));
+                    nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector)
+                        .shifted(selectedOffset*1000L));
                     modes.add(i==0?MatchChoices.ORIGINAL:-1);
                     strengths.add(100);
                     zones.add(new int[]{100,100,100,100});
