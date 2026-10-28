@@ -691,6 +691,17 @@ public class MainActivity extends Activity {
         worker.submit(()->{
             try{
                 if(file==null||!file.isFile()||file.length()<1000)throw new Exception("MP4 incompleto");
+                String outputDetails="";
+                MediaMetadataRetriever finished=new MediaMetadataRetriever();
+                try{
+                    finished.setDataSource(file.getAbsolutePath());
+                    int w=metadataInteger(finished,MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+                    int h=metadataInteger(finished,MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+                    int bitrate=metadataInteger(finished,MediaMetadataRetriever.METADATA_KEY_BITRATE);
+                    if(w>0&&h>0)outputDetails=" • MP4: "+w+"×"+h+
+                        (bitrate>0?" • "+(bitrate/1_000_000f)+" Mb/s":"");
+                }catch(Exception ignored){}finally{finished.release();}
+                final String verifiedOutput=outputDetails;
                 try(InputStream in=new FileInputStream(file);
                     OutputStream out=getContentResolver().openOutputStream(dest,"w")) {
                     if(out==null)throw new Exception("Sem permissão para salvar no destino");
@@ -698,7 +709,7 @@ public class MainActivity extends Activity {
                     while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
                 }
                 file.delete();
-                main.post(()->{busy=false;progress.setProgress(100);refresh();say("MP4 salvo! Abra em Arquivos. Arquivos originais preservados.");});
+                main.post(()->{busy=false;progress.setProgress(100);refresh();say("MP4 salvo!"+verifiedOutput+" • Originais preservados. A qualidade não cria detalhes ausentes.");});
             }catch(Exception e){
                 main.post(()->endExport("Erro ao salvar: "+e.getMessage()));
             }
