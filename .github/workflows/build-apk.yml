@@ -26,11 +26,10 @@ jobs:
           java-version: '17'
       - name: Validar motor de cores (Java puro)
         run: bash tests_jdk/run.sh
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Instalar plataforma Android SDK
+      - name: Instalar plataforma Android SDK (runner nativo)
         run: |
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
