@@ -23,6 +23,17 @@ public final class MatchChoicesSelfTest {
         near(choices[MatchChoices.SKIN].gains[RegionMath.LIPS][0],1.09f,"skin matches lips");
         ok(choices[MatchChoices.BALANCED]!=p,"no alias on plan");
         near(p.gains[0][0],1.12f,"input unchanged");
-        System.out.println("MatchChoices: 13 checks OK");
+        RegionMath.Plan[] noGrade=MatchChoices.candidates(p,0);
+        near(noGrade[MatchChoices.BALANCED].gains[0][0],1f,"zero intensity disables grade");
+        RegionMath.Plan[] half=MatchChoices.candidates(p,50);
+        near(half[MatchChoices.BALANCED].gains[0][0],1.06f,"per-cut strength 50");
+        RegionMath.Plan[] full=MatchChoices.candidates(p,100);
+        near(full[MatchChoices.BALANCED].gains[0][0],1.12f,"per-cut strength 100");
+        RegionMath.Plan[] strong=MatchChoices.candidates(p,150);
+        near(strong[MatchChoices.BALANCED].gains[0][0],1.18f,"per-cut strength 150");
+        near(MatchChoices.candidates(p,250)[MatchChoices.BALANCED].gains[0][0],1.18f,"bounded intensity");
+        near(MatchChoices.candidates(p,-99)[MatchChoices.BALANCED].gains[0][0],1f,"negative intensity clamped");
+        near(p.gains[0][0],1.12f,"source gains preserved");
+        System.out.println("MatchChoices: 20 checks OK");
     }
 }
