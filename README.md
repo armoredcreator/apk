@@ -1,6 +1,6 @@
 # FrameMatch Android — port nativo, versão 0.2-dev (validação de compilação em GitHub Actions)
 
-**Situação: código-fonte implementado; APK AINDA NÃO compilado nem testado num Android real.** Não é uma cópia binária do programa Python/Tkinter para Windows; foi reimplementado em Java para Android.
+**Situação (28/10/2026): APK debug COMPILADO e testes Android PASSARAM no GitHub Actions. Ainda NÃO testado em um dispositivo Android real.** Não é uma cópia binária do programa Python/Tkinter para Windows; foi reimplementado em Java para Android.
 
 ## Função e fluxo
 
@@ -27,7 +27,7 @@
 - SDR por projeto. Vídeos HDR/mistura HDR+SDR exigem futura calibração e tratamento de cor adicional. Há vídeos com trilhas/codec/formato não suportados pelos codecs do dispositivo.
 - Media3 não fornece transição de crossfade de vídeo/áudio para composição sequencial nesta API. Cortes são diretos; reenquadramento pode suavizar a percepção visual, mas não substitui interpolação de movimento.
 - Até 16 vídeos, sem garantia para arquivos longos/4K: tempo de varredura e exportação depende do Android e da memória livre.
-- Ainda não há **APK compilado**, teste com o seu celular, comparativo de cor no MP4 gerado pelo Android ou evidência de CI verde. Nenhum resultado no Windows deve ser interpretado como validação Android.
+- O APK debug foi compilado com sucesso na [execução 40615353527 do GitHub Actions](https://github.com/armoredcreator/apk/actions/runs/40615353527). Ainda não há teste com o seu celular nem comparativo de cores do MP4 exportado pelo Android. Resultados Windows não são validação Android.
 
 ## Como compilar no GitHub (sem Android Studio local)
 
@@ -35,7 +35,7 @@
 2. Envie **o conteúdo desta pasta** para a raiz do repositório (incluindo `.github/workflows/build-apk.yml`; uploads via interface web podem ocultar arquivos `.github`, confira).
 3. `Actions` → `Compilar APK Android` → `Run workflow`.
 4. O pipeline executará teste Java sem SDK, testes Gradle e `:app:assembleDebug`. Se ficar verde, baixe o artefato `FrameMatch-Android-debug-apk` e instale o `app-debug.apk` no Android.
-5. Se a compilação falhar, envie logs do job para correção: **o pacote neste estágio é código pronto para CI, e não certificação de funcionamento**.
+5. O build do commit `f89c33f` passou. Em **Artifacts**, baixe `FrameMatch-Android-debug-apk`, extraia e instale `app-debug.apk`. É um APK debug para testes, não uma versão de produção.
 
 Requisitos: Java 17; AGP 8.8.2; Gradle 8.10.2; Android SDK 35; Android 8+ (minSdk 26); Media3 1.9.0; ML Kit face detection 16.1.7 bundled.
 
@@ -54,6 +54,9 @@ Executa sete verificações do motor de cor (`RegionMath`) com Java 17 puro.
 - Detecção facial no próprio dispositivo; não há identificação biométrica nem upload deliberado de vídeos.
 - Para uma próxima versão, deve-se testar cancelamento, codecs, orientação, framerate, preservação e sincronismo de áudio e resiliência contra falta de espaço antes de chamar de lançamento estável.
 
-## Próxima etapa objetiva depois de enviar o endereço do repositório
+## Próximas validações
 
-Subir/atualizar o código numa branch de trabalho; executar CI; corrigir erros reais de compilação; testar exportação H.264/AAC em aparelho Android; comparar corte, céu, pele e lábios nos arquivos de exemplo; publicar APK de teste somente após build verde.
+1. Instalar o APK debug num Android compatível.
+2. Exportar dois vídeos, checando orientação, áudio AAC, duração e continuidade do corte.
+3. Comparar céu, pele e lábios com os vídeos de referência.
+4. Corrigir qualquer problema do shader GLES, codecs do dispositivo ou reenquadramento antes da versão estável.
