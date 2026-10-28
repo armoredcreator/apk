@@ -6,7 +6,7 @@ public final class EntranceMatch {
     public static final class Choice {
         public final long offsetMs;
         public final float score;
-        Choice(long time,float score){offsetMs=time;this.score=score;}
+        public Choice(long time,float score){offsetMs=time;this.score=score;}
     }
     public static Choice choose(AlignmentMath.Pose reference,
                                 AlignmentMath.Pose[] targets,long[] offsetsMs) {
