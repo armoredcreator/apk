@@ -56,6 +56,17 @@ public final class FaceTimeline {
         return timeUs-samples.get(samples.size()-1).timeUs>350_000L?null:samples.get(samples.size()-1).box;
     }
     private static float mix(float a,float b,float p){return a+(b-a)*p;}
+    /**
+     * Subject tracking needs a continuous centre even past the final valid
+     * detection. Do not alter at(): the color mask still times out normally.
+     * This never introduces a new face position when the detector is missing.
+     */
+    public RegionMath.FaceBox atHolding(long timeUs) {
+        if(samples.isEmpty())return null;
+        if(timeUs>=samples.get(samples.size()-1).timeUs)
+            return samples.get(samples.size()-1).box;
+        return at(timeUs);
+    }
     public RegionMath.FaceBox first(){return samples.isEmpty()?null:samples.get(0).box;}
     public RegionMath.FaceBox last(){return samples.isEmpty()?null:samples.get(samples.size()-1).box;}
 
