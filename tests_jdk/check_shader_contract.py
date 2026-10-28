@@ -75,3 +75,11 @@ assert 'TemporalColor.consolidate(a,b,c)' in main
 assert 'max-min>.14f' in color
 assert 'choice.offsetMs<=1500' in entry
 print("Safe opt-in temporal entry clipping and three-sample color grade: OK")
+
+assert 'private void renderCutPreview(int nextClip)' in main
+assert 'setEndPositionMs(ends[k])' in main
+assert 'new VideoView(this)' in main
+assert 'previewPlayer.setOnPreparedListener' in main
+assert 'if(k==1&&zooms.get(idx)!=null)' in main
+assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
+print("Cut preview: two clipped segments, color/geometry and integrated video playback OK")
