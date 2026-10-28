@@ -15,4 +15,14 @@ assert 'gain=clamp(gain,.84f,1.18f)' in math, "preview must use identical bounds
 assert 'float fade=.35f+.65f*smoothstep(.02f,.12f,lum)' in math, "preview needs tonal protection"
 assert 'blendStable' in math and 'frameOffset(selected.get(i),false,500_000L)' in main, "early boundary sample is missing"
 assert 'release=2_800_000L' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
-print("Shader SDR / CPU-preview equivalence contract: OK")
+choices=Path("app/src/main/java/com/frame/framematch/MatchChoices.java").read_text(encoding="utf-8")
+assert 'public static final int COUNT=5' in choices
+assert 'scaled(calibrated,.45f,.45f,.45f,.45f)' in choices
+assert 'scaled(calibrated,.9f,1f,0f,0f)' in choices
+assert 'scaled(calibrated,.3f,0f,1f,1f)' in choices
+assert 'selectedModes.set(clipIndex,mode)' in main
+assert 'MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,' in main
+assert 'if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)' in main
+assert 'HorizontalScrollView scroll=new HorizontalScrollView(this)' in main
+assert 'new Bitmap[2+MatchChoices.COUNT]' in main
+print("Shader SDR, cinco alternativas, seleção e exportação: OK")
