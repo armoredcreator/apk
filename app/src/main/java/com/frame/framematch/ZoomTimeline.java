@@ -1,15 +1,13 @@
 package com.frame.framematch;
 
 /**
- * Single continuous camera trajectory for Android's experimental V39-target zoom.
- * Rendering parity with the approved desktop V39 has NOT been established.
- *
- * Pure Java: Android-free regression tests can sample every output frame.
+ * Camera zoom timeline. Keep the approved approach unchanged.
+ * The recede uses a continuous, near-uniform pace with short smooth ramps,
+ * instead of concentrating the movement in the middle of clip two.
  */
 public final class ZoomTimeline {
     private ZoomTimeline() {}
 
-    // Quintic smoothstep: continuous position, velocity and acceleration.
     private static double ease(double value) {
         double t = Math.max(0d, Math.min(1d, value));
         return t * t * t * (t * (t * 6d - 15d) + 10d);
@@ -22,8 +20,30 @@ public final class ZoomTimeline {
         return 1f + (peak - 1f) * (float) ease(progress);
     }
 
+    // Integral of the quintic easing function. I(0)=0 and I(1)=1/2.
+    private static double integralEase(double t) {
+        return t * t * t * t * (2.5d + t * (-3d + t));
+    }
+
+    /**
+     * Slow, uninterrupted zoom out: smooth takeoff, near-uniform middle,
+     * smooth landing. The scale is exactly peak at frame zero and 1 at the
+     * final frame, with no artificial release/reset.
+     */
     public static float recede(long sourceUs, long durationUs, float peak) {
-        double progress = sourceUs / (double) Math.max(1L, durationUs);
-        return 1f + (peak - 1f) * (float) (1d - ease(progress));
+        double t = Math.max(0d, Math.min(1d,
+                sourceUs / (double) Math.max(1L, durationUs)));
+        final double ramp = 0.14d;
+        final double area;
+        if (t < ramp) {
+            area = ramp * integralEase(t / ramp);
+        } else if (t <= 1d - ramp) {
+            area = ramp * 0.5d + (t - ramp);
+        } else {
+            double tail = (1d - t) / ramp;
+            area = 1d - ramp - ramp * integralEase(tail);
+        }
+        double progress = area / (1d - ramp);
+        return 1f + (peak - 1f) * (float) (1d - progress);
     }
 }
