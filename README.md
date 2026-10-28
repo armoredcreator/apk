@@ -11,17 +11,18 @@
 
 
 
-## Tentativas por corte — versão 0.4.0-alpha
+## Tentativas por corte — versão 0.4.1-alpha
 
-A correção não depende de vídeos específicos: cada corte entre clipes recebe cinco alternativas geradas automaticamente a partir dos quadros dos próprios arquivos.
+A correção não depende de vídeos específicos: cada corte entre clipes recebe seis alternativas (cinco estratégias mais ajuste fino) geradas automaticamente a partir dos quadros dos próprios arquivos.
 
 - **Original:** mantém as cores sem alteração.
 - **Suave:** reduz os ajustes globais e locais.
 - **Equilibrada:** usa a calibração conservadora do motor.
 - **Priorizar cenário:** privilegia céu azul e ambiente, sem aplicar correção local a pele/lábios.
 - **Priorizar pele:** reduz a correção global, mantém pele/lábios e deixa céu sem ajuste local.
+- **Ajuste fino:** controle independente de cenário, céu/azul, pele e lábios para aquele corte.
 
-Após clicar **GERAR TENTATIVAS DE COR PARA CADA CORTE**, deslize horizontalmente pelas opções de cada transição. Toque na alternativa desejada: o app recalcula a referência de cor de todos os cortes seguintes sem precisar reler os vídeos ou repetir a detecção facial. O MP4 exportado usa **uma escolha independente por corte**, não apenas a intensidade global.
+Após clicar **GERAR TENTATIVAS DE COR PARA CADA CORTE**, deslize horizontalmente pelas opções de cada transição. Ajuste também a **intensidade do corte (0–150%)** sem afetar as demais cenas. Toque na alternativa desejada: o app recalcula a referência de cor de todos os cortes seguintes sem precisar reler os vídeos ou repetir a detecção facial. O MP4 exportado usa **uma escolha independente por corte**, não apenas a intensidade global.
 
 **Importante:** cada tentativa é uma heurística, não um resultado profissional garantido. As miniaturas usam o motor CPU e a exportação utiliza máscaras equivalentes no shader; pequenas diferenças de renderização do aparelho podem permanecer. A cor escolhida é aplicada de forma estável ao clipe inteiro; o **reenquadramento opcional** é limitado aos primeiros 2,8 segundos. A opção original evita o shader de correção daquele clipe. Os arquivos de entrada são preservados.
 
