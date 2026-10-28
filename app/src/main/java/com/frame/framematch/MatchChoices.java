@@ -31,6 +31,24 @@ public final class MatchChoices {
         return new RegionMath.Plan(gains,calibrated,base.strength);
     }
 
+    /** Per-cut intensity: 0=unaltered, 100=selected look, 150=amplified conservatively.
+     * The shared GPU+CPU safeguards still clamp the total output gains.
+     */
+    public static RegionMath.Plan intensity(RegionMath.Plan source,int percent) {
+        float factor=RegionMath.clamp(percent,0,150)/100f;
+        float[][] adjusted=new float[4][3];
+        for(int k=0;k<4;k++)for(int c=0;c<3;c++) {
+            adjusted[k][c]=1f+(source.gains[k][c]-1f)*factor;
+        }
+        return new RegionMath.Plan(adjusted,source.calibrated.clone(),source.strength);
+    }
+
+    public static RegionMath.Plan[] candidates(RegionMath.Plan calibrated,int percent) {
+        RegionMath.Plan[] result=candidates(calibrated);
+        for(int i=0;i<result.length;i++)result[i]=intensity(result[i],percent);
+        return result;
+    }
+
     public static RegionMath.Plan[] candidates(RegionMath.Plan calibrated) {
         if(calibrated==null)throw new IllegalArgumentException("Calibração ausente");
         return new RegionMath.Plan[]{
