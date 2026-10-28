@@ -1,114 +1,249 @@
 package com.frame.framematch;
 
-import android.graphics.Matrix;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.effect.MatrixTransformation;
 
-/** Only transforms pixels. Never synthesizes faces, hands, motion or other scene content. */
+/**
+ * V39 transition geometry.
+ *
+ * A cut is represented by two effects:
+ *  - beforeCut: anticipates the alignment on the tail of the previous clip;
+ *  - afterCut: starts at the aligned frame and returns slowly to the source frame.
+ *
+ * It only moves existing pixels. It never synthesizes content or changes audio.
+ */
 @UnstableApi
 public final class ContinuityZoom implements MatrixTransformation {
     private final FaceTimeline track;
     private final AlignmentMath.Transform faceTransform;
-    private final boolean landmarkMode;
-    private final RegionMath.FaceBox targetStart, referenceEnd;
+    private final RegionMath.FaceBox targetStart;
+    private final RegionMath.FaceBox referenceEnd;
     private final float ratio;
     private final long releaseTimeUs;
-    private ContinuityZoom(FaceTimeline t,RegionMath.FaceBox r,RegionMath.FaceBox a,
-                           float ratio,long releaseTimeUs){
-        track=t;referenceEnd=r;targetStart=a;this.ratio=ratio;this.releaseTimeUs=releaseTimeUs;
-        faceTransform=AlignmentMath.Transform.identity();landmarkMode=false;
+    private final long clipDurationUs;
+    private final long windowUs;
+    private final boolean staticPlan;
+    private final boolean preCut;
+
+    public static final class CutPlan {
+        public final ContinuityZoom beforeCut;
+        public final ContinuityZoom afterCut;
+
+        private CutPlan(ContinuityZoom beforeCut, ContinuityZoom afterCut) {
+            this.beforeCut = beforeCut;
+            this.afterCut = afterCut;
+        }
     }
-    private ContinuityZoom(AlignmentMath.Transform transform,long releaseUs){
-        track=null;referenceEnd=null;targetStart=null;ratio=transform.zoom;
-        faceTransform=transform;landmarkMode=true;releaseTimeUs=releaseUs;
+
+    private ContinuityZoom(FaceTimeline t, RegionMath.FaceBox reference,
+                           RegionMath.FaceBox target, float ratio, long releaseUs) {
+        track = t;
+        referenceEnd = reference;
+        targetStart = target;
+        this.ratio = ratio;
+        releaseTimeUs = releaseUs;
+        clipDurationUs = 0L;
+        windowUs = releaseUs;
+        faceTransform = AlignmentMath.Transform.identity();
+        staticPlan = false;
+        preCut = false;
     }
-    /** Face landmarks of the adjacent cut take priority over face-box zoom. */
-    public static ContinuityZoom facePlan(AlignmentMath.Pose reference,AlignmentMath.Pose target,
-                                           float strength,long durationMs){
-        AlignmentMath.Transform change=AlignmentMath.estimate(reference,target,strength);
-        if(Math.abs(change.zoom-1)<.002f&&Math.abs(change.rotation)<.001f&&
-            change.displacement()<.003f)return null;
-        return new ContinuityZoom(change,Math.max(500,Math.min(3000,durationMs))*1000L);
+
+    private ContinuityZoom(AlignmentMath.Transform transform, long windowUs,
+                           long clipDurationUs, boolean preCut) {
+        track = null;
+        referenceEnd = null;
+        targetStart = null;
+        ratio = transform.zoom;
+        faceTransform = transform;
+        releaseTimeUs = Math.max(1L, windowUs);
+        this.windowUs = Math.max(1L, windowUs);
+        this.clipDurationUs = Math.max(0L, clipDurationUs);
+        staticPlan = true;
+        this.preCut = preCut;
     }
-    private AlignmentMath.Transform faceAt(long timeUs){
-        float t=AlignmentMath.fade(timeUs,releaseTimeUs);
+
+    /** Compatibility helper for callers that need only the post-cut behavior. */
+    public static ContinuityZoom facePlan(AlignmentMath.Pose reference,
+                                          AlignmentMath.Pose target,
+                                          float strength, long durationMs) {
+        AlignmentMath.Transform change = AlignmentMath.estimate(reference, target, strength);
+        if (isIdentity(change)) return null;
+        return new ContinuityZoom(change, clampWindow(durationMs), 0L, false);
+    }
+
+    /**
+     * Creates the complete V39 transition. The lead-in and retreat are derived
+     * from the measured transform; the 33% example is never used as a constant.
+     */
+    public static CutPlan cutPlan(AlignmentMath.Pose reference,
+                                  AlignmentMath.Pose target,
+                                  float strength,
+                                  long retreatMs,
+                                  long previousDurationUs) {
+        AlignmentMath.Transform change = AlignmentMath.estimate(reference, target, strength);
+        if (isIdentity(change)) return null;
+
+        long retreatUs = clampWindow(retreatMs) * 1000L;
+        float delta = Math.abs(change.zoom - 1f) + change.displacement();
+        long leadUs = 1_200_000L + (long) (delta * 6_000_000L);
+        leadUs = Math.max(1_500_000L, Math.min(3_000_000L, leadUs));
+
+        // A short previous scene cannot safely host an anticipation ramp.
+        long safeLead = Math.min(leadUs, Math.max(0L, previousDurationUs - 100_000L));
+        if (safeLead < 500_000L) return null;
+
+        return new CutPlan(
+            new ContinuityZoom(change, safeLead, previousDurationUs, true),
+            new ContinuityZoom(change, retreatUs, 0L, false));
+    }
+
+    private static long clampWindow(long durationMs) {
+        return Math.max(500L, Math.min(3000L, durationMs));
+    }
+
+    private static boolean isIdentity(AlignmentMath.Transform transform) {
+        return transform == null
+            || (Math.abs(transform.zoom - 1f) < .002f
+                && Math.abs(transform.rotation) < .001f
+                && transform.displacement() < .003f);
+    }
+
+    private AlignmentMath.Transform transformAt(long timeUs) {
+        if (preCut) {
+            long startUs = Math.max(0L, clipDurationUs - windowUs);
+            float p = RegionMath.clamp((timeUs - startUs) / (float) Math.max(1L, windowUs), 0f, 1f);
+            p = p * p * (3f - 2f * p);
+            return scaled(faceTransform, p);
+        }
+
+        float p = RegionMath.clamp(timeUs / (float) Math.max(1L, releaseTimeUs), 0f, 1f);
+        p = 1f - p * p * (3f - 2f * p);
+        return scaled(faceTransform, p);
+    }
+
+    private static AlignmentMath.Transform scaled(AlignmentMath.Transform source, float p) {
         return new AlignmentMath.Transform(
-            1+(faceTransform.zoom-1)*t,faceTransform.dx*t,faceTransform.dy*t,
-            faceTransform.rotation*t);
+            1f + (source.zoom - 1f) * p,
+            source.dx * p,
+            source.dy * p,
+            source.rotation * p);
     }
-    public static ContinuityZoom plan(FaceTimeline track,RegionMath.FaceBox end){
-        if(end==null||track==null||track.count()<4||track.first()==null)return null;
-        RegionMath.FaceBox first=track.first();
-        float ratio=end.w/Math.max(.0001f,first.w);
-        // Require evidence of an actual move closer, not just a jump cut to a wider shot.
-        RegionMath.FaceBox later=track.at(2_000_000L);
-        if(later==null || ratio<1.20f || ratio>1.85f || later.w<first.w*1.12f)return null;
-        long release=2_800_000L;
-        return new ContinuityZoom(track,end,first,ratio,release);
+
+    public float initialZoom() {
+        return staticPlan ? faceTransform.zoom : ratio;
     }
-    public float initialZoom(){return ratio;}
-    public float zoomAt(long timeUs){
-        if(landmarkMode)return faceAt(timeUs).zoom;
-        if(timeUs>=releaseTimeUs)return 1;
-        float p=RegionMath.clamp(timeUs/(float)releaseTimeUs,0,1);
-        float fade=1-(p*p*(3-2*p));
-        RegionMath.FaceBox f=track.at(timeUs);
-        float currentRatio=f==null?1:RegionMath.clamp(referenceEnd.w/Math.max(.001f,f.w),1,ratio);
-        return 1+(currentRatio-1)*fade;
+
+    public float zoomAt(long timeUs) {
+        if (staticPlan) return transformAt(timeUs).zoom;
+        if (timeUs >= releaseTimeUs) return 1f;
+        float p = RegionMath.clamp(timeUs / (float) releaseTimeUs, 0f, 1f);
+        float fade = 1f - (p * p * (3f - 2f * p));
+        RegionMath.FaceBox current = track.at(timeUs);
+        float currentRatio = current == null
+            ? 1f
+            : RegionMath.clamp(referenceEnd.w / Math.max(.001f, current.w), 1f, ratio);
+        return 1f + (currentRatio - 1f) * fade;
     }
-    public Bitmap preview(Bitmap source){
-        if(landmarkMode){
-            AlignmentMath.Transform t=faceAt(0);
-            Matrix m=new Matrix();
-            float cos=(float)Math.cos(t.rotation),sin=(float)Math.sin(t.rotation);
-            float w=source.getWidth(),h=source.getHeight();
-            // Convert NDC transform into pixel coordinates; y-axis is inverted.
-            float a=t.zoom*cos,b=t.zoom*sin,c=-t.zoom*sin,d=t.zoom*cos;
-            float dx=(1-a-c)*w*.5f+t.dx*w*.5f;
-            float dy=(1-b-d)*h*.5f-t.dy*h*.5f;
-            // Aspect-ratio correction for cross-axis coefficients.
-            m.setValues(new float[]{a,c*w/h,dx,b*h/w,d,dy,0,0,1});
-            Bitmap result=Bitmap.createBitmap(source.getWidth(),source.getHeight(),Bitmap.Config.ARGB_8888);
-            Canvas canvas=new Canvas(result);canvas.drawColor(android.graphics.Color.BLACK);
-            canvas.drawBitmap(source,m,new Paint(Paint.FILTER_BITMAP_FLAG));
-            return result;
+
+    /** Preview at the effect's natural boundary: end for beforeCut, start for afterCut. */
+    public Bitmap preview(Bitmap source) {
+        long timeUs = preCut ? Math.max(0L, clipDurationUs - 1L) : 0L;
+        return previewAt(source, timeUs);
+    }
+
+    /** Preview the same transform used by Media3 at a specific local timestamp. */
+    public Bitmap previewAt(Bitmap source, long presentationTimeUs) {
+        if (source == null) return null;
+
+        if (staticPlan) {
+            return render(source, transformAt(presentationTimeUs));
         }
-        float z=zoomAt(0L);
-        if(z<=1.001f)return source;
-        RegionMath.FaceBox f=track.at(0);
-        if(f==null)return source;
-        float tx=(f.x+f.w*.5f)*source.getWidth(),ty=(f.y+f.h*.5f)*source.getHeight();
-        float rx=(referenceEnd.x+referenceEnd.w*.5f)*source.getWidth();
-        float ry=(referenceEnd.y+referenceEnd.h*.5f)*source.getHeight();
-        float dx=RegionMath.clamp(rx-z*tx,source.getWidth()*(1-z),0);
-        float dy=RegionMath.clamp(ry-z*ty,source.getHeight()*(1-z),0);
-        Matrix m=new Matrix();m.setValues(new float[]{z,0,dx,0,z,dy,0,0,1});
-        Bitmap rendered=Bitmap.createBitmap(source.getWidth(),source.getHeight(),Bitmap.Config.ARGB_8888);
-        Canvas c=new Canvas(rendered);c.drawColor(android.graphics.Color.BLACK);
-        c.drawBitmap(source,m,new Paint(Paint.FILTER_BITMAP_FLAG));
-        return rendered;
+
+        float zoom = zoomAt(presentationTimeUs);
+        if (zoom <= 1.001f) return source;
+        RegionMath.FaceBox current = track.at(presentationTimeUs);
+        if (current == null) return source;
+
+        float tx = (current.x + current.w * .5f) * source.getWidth();
+        float ty = (current.y + current.h * .5f) * source.getHeight();
+        float rx = (referenceEnd.x + referenceEnd.w * .5f) * source.getWidth();
+        float ry = (referenceEnd.y + referenceEnd.h * .5f) * source.getHeight();
+        float dx = RegionMath.clamp(rx - zoom * tx, source.getWidth() * (1f - zoom), 0f);
+        float dy = RegionMath.clamp(ry - zoom * ty, source.getHeight() * (1f - zoom), 0f);
+
+        Matrix matrix = new Matrix();
+        matrix.setValues(new float[]{zoom, 0f, dx, 0f, zoom, dy, 0f, 0f, 1f});
+        return render(source, matrix);
     }
-    @Override public Matrix getMatrix(long presentationTimeUs){
-        if(landmarkMode){
-            AlignmentMath.Transform t=faceAt(presentationTimeUs);
-            float cos=(float)Math.cos(t.rotation),sin=(float)Math.sin(t.rotation);
-            Matrix m=new Matrix();m.setValues(new float[]{t.zoom*cos,-t.zoom*sin,t.dx,
-                t.zoom*sin,t.zoom*cos,t.dy,0,0,1});return m;
+
+    private static Bitmap render(Bitmap source, AlignmentMath.Transform transform) {
+        float cos = (float) Math.cos(transform.rotation);
+        float sin = (float) Math.sin(transform.rotation);
+        float w = source.getWidth();
+        float h = source.getHeight();
+        float a = transform.zoom * cos;
+        float b = transform.zoom * sin;
+        float c = -transform.zoom * sin;
+        float d = transform.zoom * cos;
+        float dx = (1f - a - c) * w * .5f + transform.dx * w * .5f;
+        float dy = (1f - b - d) * h * .5f - transform.dy * h * .5f;
+
+        Matrix matrix = new Matrix();
+        matrix.setValues(new float[]{a, c * w / h, dx, b * h / w, d, dy, 0f, 0f, 1f});
+        return render(source, matrix);
+    }
+
+    private static Bitmap render(Bitmap source, Matrix matrix) {
+        Bitmap result = Bitmap.createBitmap(source.getWidth(), source.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(result);
+        canvas.drawColor(android.graphics.Color.BLACK);
+        canvas.drawBitmap(source, matrix, new Paint(Paint.FILTER_BITMAP_FLAG));
+        return result;
+    }
+
+    @Override
+    public Matrix getMatrix(long presentationTimeUs) {
+        if (staticPlan) {
+            AlignmentMath.Transform transform = transformAt(presentationTimeUs);
+            float cos = (float) Math.cos(transform.rotation);
+            float sin = (float) Math.sin(transform.rotation);
+            Matrix matrix = new Matrix();
+            matrix.setValues(new float[]{
+                transform.zoom * cos, -transform.zoom * sin, transform.dx,
+                transform.zoom * sin, transform.zoom * cos, transform.dy,
+                0f, 0f, 1f});
+            return matrix;
         }
-        Matrix m=new Matrix();float zoom=zoomAt(presentationTimeUs);
-        if(zoom<=1.001f)return m;
-        RegionMath.FaceBox curr=track.at(presentationTimeUs);
-        if(curr==null)return m;
-        // NDC coordinates: x [-1,1], y top positive via conversion here.
-        float tx=2*(curr.x+curr.w*.5f)-1,ty=1-2*(curr.y+curr.h*.5f);
-        float rx=2*(referenceEnd.x+referenceEnd.w*.5f)-1;
-        float ry=1-2*(referenceEnd.y+referenceEnd.h*.5f);
-        float shiftX=RegionMath.clamp(rx-zoom*tx,1-zoom,zoom-1);
-        float shiftY=RegionMath.clamp(ry-zoom*ty,1-zoom,zoom-1);
-        m.setValues(new float[]{zoom,0,shiftX, 0,zoom,shiftY, 0,0,1});
-        return m;
+
+        Matrix matrix = new Matrix();
+        float zoom = zoomAt(presentationTimeUs);
+        if (zoom <= 1.001f) return matrix;
+
+        RegionMath.FaceBox current = track.at(presentationTimeUs);
+        if (current == null) return matrix;
+        float tx = 2f * (current.x + current.w * .5f) - 1f;
+        float ty = 1f - 2f * (current.y + current.h * .5f);
+        float rx = 2f * (referenceEnd.x + referenceEnd.w * .5f) - 1f;
+        float ry = 1f - 2f * (referenceEnd.y + referenceEnd.h * .5f);
+        float shiftX = RegionMath.clamp(rx - zoom * tx, 1f - zoom, zoom - 1f);
+        float shiftY = RegionMath.clamp(ry - zoom * ty, 1f - zoom, zoom - 1f);
+        matrix.setValues(new float[]{zoom, 0f, shiftX, 0f, zoom, shiftY, 0f, 0f, 1f});
+        return matrix;
+    }
+
+    /** Legacy face-box plan retained as a conservative fallback. */
+    public static ContinuityZoom plan(FaceTimeline track, RegionMath.FaceBox end) {
+        if (end == null || track == null || track.count() < 4 || track.first() == null) return null;
+        RegionMath.FaceBox first = track.first();
+        float ratio = end.w / Math.max(.0001f, first.w);
+        RegionMath.FaceBox later = track.at(2_000_000L);
+        if (later == null || ratio < 1.20f || ratio > 1.85f || later.w < first.w * 1.12f) return null;
+        return new ContinuityZoom(track, end, first, ratio, 2_800_000L);
     }
 }
