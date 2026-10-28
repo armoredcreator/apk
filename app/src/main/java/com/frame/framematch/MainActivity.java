@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
     private SeekBar intensity;
     private ProgressBar progress;
     private Button addButton, analyzeButton, exportButton, cancelButton;
-    private android.widget.CheckBox alignSwitch, regionSwitch;
+    private android.widget.CheckBox alignSwitch, regionSwitch, cinematicZoomSwitch;
     private SeekBar faceDuration,faceStrength;
     private android.widget.CheckBox matchSizeSwitch, matchBitrateSwitch, matchFpsSwitch;
     private TextView masterInfo;
@@ -152,6 +152,10 @@ public class MainActivity extends Activity {
         enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
         container.addView(enableAllButton);
         container.addView(text("Ativar tudo inclui o zoom experimental. Você pode desligá-lo depois. As 6 alternativas de cor são EXCLUSIVAS; use Ajuste fino para combinar regiões.",12,false));
+        cinematicZoomSwitch=new android.widget.CheckBox(this);
+        cinematicZoomSwitch.setText("ZOOM V37 (apenas 2 clipes): 33% nos 3s antes do corte, recuo até o fim (opcional)");
+        cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
+        cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         intensity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar b,int p,boolean from){if(from)invalidateAnalysis();}
@@ -253,6 +257,7 @@ public class MainActivity extends Activity {
         exportButton.setEnabled(!busy && clips.size()>=2);
         intensity.setEnabled(!busy);regionSwitch.setEnabled(!busy);alignSwitch.setEnabled(!busy);
         faceStrength.setEnabled(!busy);faceDuration.setEnabled(!busy);smartEntrySwitch.setEnabled(!busy);
+        cinematicZoomSwitch.setEnabled(!busy);
         cancelButton.setVisibility(busy&&transformer!=null?View.VISIBLE:View.GONE);
     }
 
@@ -774,7 +779,15 @@ public class MainActivity extends Activity {
                         effects.add(new RegionEffect(plans.get(idx),tracks.get(idx)));
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
-                    if(k==1&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
+                    if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
+                }
+                if(cinematicZoomSwitch.isChecked() && clips.size()==2){
+                    if(k==0){
+                        // Approach is computed from the original source timeline, not the clipped preview.
+                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f));
+                    }else{
+                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f));
+                    }
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
@@ -863,7 +876,20 @@ public class MainActivity extends Activity {
                     if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
                         fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
-                    if(zooms.get(i)!=null)fx.add(zooms.get(i));
+                    if(!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(i)!=null)fx.add(zooms.get(i));
+                }
+                if(cinematicZoomSwitch.isChecked() && clips.size()==2){
+                    if(i+1<clips.size()){
+                        // The current clip approaches its NEXT cut over the final three seconds.
+                        fx.add(CinematicCutZoom.before(i==0?0:entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                    }else if(i>0){
+                        // Last clip: finish the recede before the final frame.
+                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                    }
+                    // Middle clips need a recede from the previous cut as well.
+                    if(i>0 && i+1<clips.size()){
+                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                    }
                 }
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
                 int[] outputSize=masterProfile==null?new int[]{540,960}:
