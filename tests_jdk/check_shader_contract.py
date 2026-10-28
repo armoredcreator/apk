@@ -37,3 +37,18 @@ assert 'RegionMath.analyze(' in master and 'RegionMath.blendStable' in master
 assert 'ContinuityZoom.plan(timeline,adjacentFace)' in main, "movement continuity still uses adjacent clips"
 assert '"CLIP 1: cores"' in main
 print("Shader SDR, master Clip 1, seis alternativas, cor por zona e exportação: OK")
+
+quality=Path("app/src/main/java/com/frame/framematch/QualityProfile.java").read_text(encoding="utf-8")
+assert "outputSize(boolean followMaster)" in quality
+assert "frameRateCeiling(boolean followMaster)" in quality
+assert "bitrateEstimated" in quality
+assert 'MediaFormat.KEY_FRAME_RATE' in main and 'MediaFormat.KEY_BIT_RATE' in main
+assert 'matchSizeSwitch.setChecked(true)' in main
+assert 'matchBitrateSwitch.setChecked(false)' in main
+assert 'matchFpsSwitch.setChecked(false)' in main
+assert 'enableEverything()' in main and 'applyModeToAll()' in main
+assert 'item.setFrameRate(masterProfile.frameRateCeiling(true))' in main
+assert '.setRequestedVideoEncoderSettings(new VideoEncoderSettings.Builder()' in main
+assert 'masterProfile.outputSize(matchSizeSwitch.isChecked())' in main
+assert 'METADATA_KEY_VIDEO_WIDTH' in main and 'METADATA_KEY_VIDEO_HEIGHT' in main
+print("QualityProfile, opções simultâneas e seleção em lote: OK")
