@@ -24,6 +24,31 @@ public final class RegionMathSelfTest {
         check(after<before,"blue should improve");
         RegionMath.Plan zero=RegionMath.analyze(ref,120,120,null,tar,120,120,null,0);
         check(java.util.Arrays.equals(tar,RegionMath.preview(tar,120,120,null,zero)),"zero strength identity");
-        System.out.println("RegionMath: 7 checks OK");
+        float[][] hi={{1.30f,1.30f,1.30f},{1.30f,1.30f,1.30f},
+                      {1.30f,1.30f,1.30f},{1.30f,1.30f,1.30f}};
+        float[][] low={{.70f,.70f,.70f},{1f,1f,1f},{1f,1f,1f},{1f,1f,1f}};
+        RegionMath.Plan boosted=new RegionMath.Plan(hi,new boolean[]{true,true,true,true},1f);
+        RegionMath.Plan darkened=new RegionMath.Plan(low,new boolean[]{true,false,false,false},1f);
+        int mid=RegionMath.preview(new int[]{color(125,125,125)},1,1,null,boosted)[0];
+        check(((mid>>16)&255)<=149,"compound gain capped at 18%");
+        int shadow=RegionMath.preview(new int[]{color(10,10,10)},1,1,null,boosted)[0];
+        check(((shadow>>16)&255)<=12,"dark shadow protected");
+        int highlight=RegionMath.preview(new int[]{color(248,248,248)},1,1,null,darkened)[0];
+        check(((highlight>>16)&255)>=226,"bright highlights protected");
+        RegionMath.Plan firstGrade=new RegionMath.Plan(
+            new float[][]{{1.05f,1.05f,1.05f},{1,1,1},{1,1,1},{1,1,1}},
+            new boolean[]{true,false,false,false},.65f);
+        RegionMath.Plan stable=new RegionMath.Plan(
+            new float[][]{{1.06f,1.06f,1.06f},{1,1,1},{1,1,1},{1,1,1}},
+            new boolean[]{true,false,false,false},.65f);
+        RegionMath.Plan flash=new RegionMath.Plan(
+            new float[][]{{1.18f,1.18f,1.18f},{1,1,1},{1,1,1},{1,1,1}},
+            new boolean[]{true,false,false,false},.65f);
+        check(RegionMath.blendStable(firstGrade,stable).gains[0][0]>1.05f,"stable exposure estimate blended");
+        check(Math.abs(RegionMath.blendStable(firstGrade,flash).gains[0][0]-1.05f)<.001f,
+              "temporary exposure pulse must not dominate matching");
+        int[] blues={color(25,55,155),color(70,80,140)};
+        check(RegionMath.preview(blues,2,1,null,firstGrade).length==2,"soft mask works");
+        System.out.println("RegionMath: 13 checks OK");
     }
 }
