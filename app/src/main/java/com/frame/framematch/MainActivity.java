@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
     private final ArrayList<AlignmentMath.Pose> startPoses=new ArrayList<>(), endPoses=new ArrayList<>();
     private final ArrayList<Long> entryOffsetsMs=new ArrayList<>();
     private android.widget.CheckBox smartEntrySwitch;
+    private android.widget.CheckBox cinematicV37Switch;
+    private android.widget.CheckBox cinematicDeepSwitch;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private LinearLayout clipList, container, previews;
@@ -137,6 +139,15 @@ public class MainActivity extends Activity {
         faceStrength.setOnSeekBarChangeListener(faceChanged);
         faceDuration.setOnSeekBarChangeListener(faceChanged);
         regionSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
+        cinematicV37Switch=new android.widget.CheckBox(this);
+        cinematicV37Switch.setText("Câmera cinematográfica V37: aproxima 3s antes e recua até o fim");
+        cinematicV37Switch.setChecked(true);container.addView(cinematicV37Switch);
+        cinematicDeepSwitch=new android.widget.CheckBox(this);
+        cinematicDeepSwitch.setText("Zoom profundo (33%); desmarque para suave (22%)");
+        cinematicDeepSwitch.setChecked(true);container.addView(cinematicDeepSwitch);
+        cinematicV37Switch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
+        cinematicDeepSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
+        container.addView(text("V37: usa câmera contínua nos cortes, sem alterar proporções. Ajuste a cor separadamente.",12,false));
         container.addView(text("QUALIDADE DE EXPORTAÇÃO — CLIP 1 COMO REFERÊNCIA",13,true));
         masterInfo=text("Adicione o Clip 1 para ver o padrão de qualidade.",12,false);
         container.addView(masterInfo);
@@ -253,6 +264,7 @@ public class MainActivity extends Activity {
         exportButton.setEnabled(!busy && clips.size()>=2);
         intensity.setEnabled(!busy);regionSwitch.setEnabled(!busy);alignSwitch.setEnabled(!busy);
         faceStrength.setEnabled(!busy);faceDuration.setEnabled(!busy);smartEntrySwitch.setEnabled(!busy);
+        cinematicV37Switch.setEnabled(!busy);cinematicDeepSwitch.setEnabled(!busy);
         cancelButton.setVisibility(busy&&transformer!=null?View.VISIBLE:View.GONE);
     }
 
@@ -774,7 +786,13 @@ public class MainActivity extends Activity {
                         effects.add(new RegionEffect(plans.get(idx),tracks.get(idx)));
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
-                    if(k==1&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
+                    if(cinematicV37Switch.isChecked()){
+                        float z=cinematicDeepSwitch.isChecked()?1.33f:1.22f;
+                        long segmentUs=(ends[k]-starts[k])*1000L;
+                        if(k==0) effects.add(CinematicCutZoom.outgoing(segmentUs,z,0f,.2f));
+                        else effects.add(CinematicCutZoom.incoming(
+                            Math.max(1,(durationMs(clips.get(idx))-starts[k])*1000L),z,0f,.2f));
+                    } else if(k==1&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
@@ -863,7 +881,15 @@ public class MainActivity extends Activity {
                     if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
                         fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
-                    if(zooms.get(i)!=null)fx.add(zooms.get(i));
+                    if(!cinematicV37Switch.isChecked() && zooms.get(i)!=null)fx.add(zooms.get(i));
+                }
+                if(cinematicV37Switch.isChecked()){
+                    float z=cinematicDeepSwitch.isChecked()?1.33f:1.22f;
+                    long wholeMs=durationMs(clips.get(i));
+                    long startMs=i==0?0:entryOffsetsMs.get(i);
+                    long lengthUs=Math.max(1,(wholeMs-startMs)*1000L);
+                    if(i>0)fx.add(CinematicCutZoom.incoming(lengthUs,z,0f,.2f));
+                    if(i<clips.size()-1)fx.add(CinematicCutZoom.outgoing(lengthUs,z,0f,.2f));
                 }
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
                 int[] outputSize=masterProfile==null?new int[]{540,960}:
