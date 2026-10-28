@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
         container.addView(enableAllButton);
         container.addView(text("Ativar tudo liga também o zoom V39. Para usar sem zoom, desmarque a opção V39. As 6 alternativas de cor são EXCLUSIVAS.",12,false));
         cinematicZoomSwitch=new android.widget.CheckBox(this);
-        cinematicZoomSwitch.setText("ZOOM V39 — 33% antes da união e recuo LENTO até o enquadramento original da cena 2 (2 clipes)");
+        cinematicZoomSwitch.setText("ZOOM CINEMATOGRÁFICO (alvo V39): 33% antes da união e recuo LENTO até o enquadramento original da cena 2 (2 clipes)");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
         cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
