@@ -51,7 +51,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v0.3.0-alpha"
+          TAG="v0.4.0-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -59,7 +59,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.3.0 - Color Match mais natural" \
-              --notes "APK debug de teste. Cores suaves, limite de ganhos e comparação de duas amostras próximas ao corte; zoom segue desativado por padrão. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --title "FrameMatch Android 0.4.0 - modos de correção por cena" \
+              --notes "APK debug de teste. Seis opções de cor por transição, intensidade independente e ajustes locais de cenário, céu, pele e lábios; zoom desativado por padrão. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
               --prerelease
           fi
