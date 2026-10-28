@@ -14,6 +14,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -53,6 +54,13 @@ public class MainActivity extends Activity {
     private final ArrayList<RegionMath.Plan> plans=new ArrayList<>();
     private final ArrayList<FaceTimeline> tracks=new ArrayList<>();
     private final ArrayList<ContinuityZoom> zooms=new ArrayList<>();
+    // Cut i (between clips i-1 and i) has five alternatives, and one explicit selection.
+    private final ArrayList<RegionMath.Plan[]> alternatives=new ArrayList<>();
+    private final ArrayList<Integer> selectedModes=new ArrayList<>();
+    // Lower resolution cached boundary frames avoid rescanning videos when changing a look.
+    private final ArrayList<Bitmap> firstFrames=new ArrayList<>(), lastFrames=new ArrayList<>();
+    private final ArrayList<Bitmap> earlyFrames=new ArrayList<>(), nearEndFrames=new ArrayList<>();
+    private final ArrayList<RegionMath.FaceBox> endFaces=new ArrayList<>();
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private LinearLayout clipList, container, previews;
@@ -95,7 +103,8 @@ public class MainActivity extends Activity {
             @Override public void onStartTrackingTouch(SeekBar b){}
             @Override public void onStopTrackingTouch(SeekBar b){}
         });
-        analyzeButton=button("ANALISAR CORES E MOSTRAR COMPARAÇÃO",v->analyze());
+        container.addView(text("Após analisar, compare cinco alternativas em cada corte e marque a sua favorita. A escolha será usada no MP4.",12,false));
+        analyzeButton=button("GERAR TENTATIVAS DE COR PARA CADA CORTE",v->analyze());
         container.addView(analyzeButton);
         previews=new LinearLayout(this); previews.setOrientation(LinearLayout.VERTICAL);container.addView(previews);
         exportButton=button("UNIR E EXPORTAR MP4",v->prepareExport());container.addView(exportButton);
@@ -152,7 +161,11 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void invalidateAnalysis(){analyzed=false;plans.clear();tracks.clear();zooms.clear();previews.removeAllViews();}
+    private void invalidateAnalysis(){
+        analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
+        selectedModes.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
+        nearEndFrames.clear();endFaces.clear();previews.removeAllViews();
+    }
     private void refresh(){
         clipList.removeAllViews();
         for(int i=0;i<clips.size();i++){
