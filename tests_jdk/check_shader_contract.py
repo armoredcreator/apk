@@ -13,7 +13,7 @@ assert 'float fade=.35+.65*smoothstep(.02,.12,lum)' in shader, "protect shadows 
 math=Path("app/src/main/java/com/frame/framematch/RegionMath.java").read_text(encoding="utf-8")
 assert 'gain=clamp(gain,.84f,1.18f)' in math, "preview must use identical bounds"
 assert 'float fade=.35f+.65f*smoothstep(.02f,.12f,lum)' in math, "preview needs tonal protection"
-assert 'blendStable' in math and 'compact(frameOffset(uri,false,500_000L))' in main, "early boundary sample is missing"
+assert 'blendStable' in math and 'compact(frameOffset(uri,false,(selectedOffset+500)*1000L))' in main, "early boundary sample is missing"
 assert 'release=2_800_000L' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
 choices=Path("app/src/main/java/com/frame/framematch/MatchChoices.java").read_text(encoding="utf-8")
 assert 'public static final int COUNT=6' in choices
@@ -31,7 +31,7 @@ assert 'MatchChoices.CUSTOM' in main
 master=Path("app/src/main/java/com/frame/framematch/MasterColorMatch.java").read_text(encoding="utf-8")
 assert 'final Bitmap masterLast=lasts.get(0)' in main, "reference must always come from first clip"
 assert 'final Bitmap masterNear=ends.get(0)' in main, "early palette sample must always come from first clip"
-assert 'MasterColorMatch.calibrate(masterBoundary,masterNearby' in main, "all scene color matches must use Clip 1"
+assert 'TemporalColor.consolidate(a,b,c)' in main, "all scene color matches must use Clip 1"
 assert 'RegionMath.Plan previous=output.selected.get(i-1)' not in main, "cascaded color reference reintroduced"
 assert 'RegionMath.analyze(' in master and 'RegionMath.blendStable' in master
 assert 'lastLandmarks.get(i-1),firstLandmarks.get(i)' in main, "movement continuity still uses adjacent clips"
@@ -65,3 +65,13 @@ assert 'Math.abs(tx)>.16f||Math.abs(ty)>.16f' in align
 assert 'Bitmap[] previews=new Bitmap[4+MatchChoices.COUNT]' in main
 assert 'overlay(previews[1],small(aligned))' in main
 print("Facial landmark match, onion skin preview and constraints: OK")
+
+entry=Path("app/src/main/java/com/frame/framematch/EntranceMatch.java").read_text(encoding="utf-8")
+color=Path("app/src/main/java/com/frame/framematch/TemporalColor.java").read_text(encoding="utf-8")
+assert 'EntranceMatch.choose(finalPose.get(i-1),candidates,times)' in main
+assert 'smartEntrySwitch.setChecked(false)' in main
+assert 'setStartPositionMs(i==0?0:entryOffsetsMs.get(i))' in main
+assert 'TemporalColor.consolidate(a,b,c)' in main
+assert 'max-min>.14f' in color
+assert 'choice.offsetMs<=1500' in entry
+print("Safe opt-in temporal entry clipping and three-sample color grade: OK")
