@@ -84,10 +84,15 @@ assert 'if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(
 assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f)' in main
 assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f)' in main
 camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read_text(encoding='utf-8')
-assert 'sourceDurationUs-rampUs' in camera, "camera approach must begin 3s before the cut"
-assert 'v37Return(t)' in camera and 'return 1f+(peak-1f)*v37Return(t)' in camera, "camera recede must follow measured V37 trajectory"
-assert 'peak-(peak-1f)*smooth(t)' not in camera, "obsolete generic recede reintroduced"
-assert 'RETURN_RATIO' in camera and 'derivative(int i)' in camera, "continuous monotone V37 return is missing"
+curve=Path('app/src/main/java/com/frame/framematch/CinematicMotionCurve.java').read_text(encoding='utf-8')
+window=Path('app/src/main/java/com/frame/framematch/PreviewWindow.java').read_text(encoding='utf-8')
+assert 'CinematicMotionCurve.approach(absolute,sourceDurationUs,rampUs,peak)' in camera
+assert 'clipDurationUs-availableRamp' in curve, "camera approach must begin 3s before the cut"
+assert 'CinematicMotionCurve.recede(absolute,sourceDurationUs,peak)' in camera
+assert 'returnWeight(clamp(originalTimeUs/(float)clipDurationUs))' in curve, "full-duration recede lost"
+assert 'RETURN_RATIO' in curve and 'derivative(int i)' in curve, "continuous monotone V37 return missing"
 assert 'cinematicZoomSwitch.setChecked(false)' in main
-assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
+assert 'PreviewWindow.beforeStart(duration' in main and 'long nextEnd=nextDuration' in main
+assert 'APPROACH_MS = 3000L' in window, "preview must cover full 3-second approach"
+assert '▶ PRÉVIA REAL: 3s antes + cena seguinte completa' in main
 print("Cut preview: two clipped segments, color/geometry and integrated video playback OK")
