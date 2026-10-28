@@ -77,7 +77,7 @@ public class MainActivity extends Activity {
     private android.widget.CheckBox alignSwitch, regionSwitch;
     private android.widget.CheckBox matchSizeSwitch, matchBitrateSwitch, matchFpsSwitch;
     private TextView masterInfo;
-    private Button enableAllButton, batchModeButton;
+    private Button enableAllButton, batchModeButton, naturalButton;
     private QualityProfile masterProfile;
     private volatile boolean busy=false, analyzed=false;
     private volatile float analyzedStrength=1f;
@@ -131,6 +131,9 @@ public class MainActivity extends Activity {
         container.addView(text("O Clip 1 é a referência de cor fixa para TODOS os próximos clipes. Compare seis tentativas em cada corte e escolha a melhor.",12,false));
         analyzeButton=button("GERAR TENTATIVAS DE COR PARA CADA CORTE",v->analyze());
         container.addView(analyzeButton);
+        naturalButton=button("AUTO NATURAL — ESCOLHER MELHOR TENTATIVA EM TODOS OS CORTES",
+            v->autoNaturalAll());
+        container.addView(naturalButton);
         batchModeButton=button("APLICAR TENTATIVA DO CORTE 1 → 2 A TODOS",v->applyModeToAll());
         container.addView(batchModeButton);
         previews=new LinearLayout(this); previews.setOrientation(LinearLayout.VERTICAL);container.addView(previews);
@@ -211,6 +214,7 @@ public class MainActivity extends Activity {
         addButton.setEnabled(!busy && clips.size()<MAX_CLIPS);
         enableAllButton.setEnabled(!busy);
         batchModeButton.setEnabled(!busy && analyzed && clips.size()>=3);
+        naturalButton.setEnabled(!busy && analyzed);
         matchSizeSwitch.setEnabled(!busy);
         matchBitrateSwitch.setEnabled(!busy);
         matchFpsSwitch.setEnabled(!busy);
@@ -286,6 +290,11 @@ public class MainActivity extends Activity {
         say("Todas as correções compatíveis ativadas. Zoom é experimental e só atua no início do clipe.");
         refresh();
     }
+    private void autoNaturalAll(){
+        if(busy||!analyzed||selectedModes.size()<2)return;
+        for(int i=1;i<selectedModes.size();i++)selectedModes.set(i,-1);
+        recomputeSelected(1);
+    }
     private void applyModeToAll(){
         if(busy||!analyzed||selectedModes.size()<3)return;
         int mode=selectedModes.get(1);
@@ -305,6 +314,7 @@ public class MainActivity extends Activity {
         final ArrayList<RegionMath.Plan[]> variants=new ArrayList<>();
         final ArrayList<ContinuityZoom> alignments=new ArrayList<>();
         final ArrayList<Bitmap[]> previewRows=new ArrayList<>();
+        final ArrayList<Integer> chosenModes=new ArrayList<>();
     }
 
     private Bitmap compact(Bitmap bitmap) {
@@ -331,6 +341,7 @@ public class MainActivity extends Activity {
         output.selected.add(RegionMath.Plan.identity());
         output.variants.add(MatchChoices.candidates(RegionMath.Plan.identity()));
         output.alignments.add(null);
+        output.chosenModes.add(MatchChoices.ORIGINAL);
 
         final Bitmap masterLast=lasts.get(0);
         final Bitmap masterNear=ends.get(0);
@@ -356,7 +367,15 @@ public class MainActivity extends Activity {
             }
             RegionMath.Plan[] choices=MatchChoices.candidates(calibrated,strengths.get(i),zones.get(i));
             int mode=modes.get(i);
+            if(mode==-1){
+                RegionMath.FaceBox earlyFace=timeline==null?null:timeline.at(500_000L);
+                mode=NaturalSelector.best(masterBoundary,masterNearby,
+                    new MasterColorMatch.Sample(pixels(target),target.getWidth(),target.getHeight(),firstFace),
+                    new MasterColorMatch.Sample(pixels(earlys.get(i)),earlys.get(i).getWidth(),
+                        earlys.get(i).getHeight(),earlyFace),choices);
+            }
             if(!MatchChoices.valid(mode))throw new IllegalArgumentException("Tentativa de cor inválida");
+            output.chosenModes.add(mode);
             output.variants.add(choices);
             output.selected.add(choices[mode]);
 
@@ -383,6 +402,7 @@ public class MainActivity extends Activity {
     }
 
     private void installResult(MatchResult result) {
+        selectedModes.clear();selectedModes.addAll(result.chosenModes);
         plans.clear();plans.addAll(result.selected);
         alternatives.clear();alternatives.addAll(result.variants);
         zooms.clear();zooms.addAll(result.alignments);
@@ -393,7 +413,7 @@ public class MainActivity extends Activity {
     }
 
     private void chooseColor(int clipIndex,int mode){
-        if(!analyzed||busy||clipIndex<1||clipIndex>=selectedModes.size()||!MatchChoices.valid(mode))return;
+        if(!analyzed||busy||clipIndex<1||clipIndex>=selectedModes.size()||(mode!=-1&&!MatchChoices.valid(mode)))return;
         if(selectedModes.get(clipIndex)==mode)return;
         selectedModes.set(clipIndex,mode);
         recomputeSelected(clipIndex);
@@ -424,7 +444,8 @@ public class MainActivity extends Activity {
         for(int[] values:perCutZones)zones.add(values.clone());
         final float strength=intensity.getProgress()/100f;
         final boolean regional=regionSwitch.isChecked(),align=alignSwitch.isChecked();
-        busy=true;refresh();say("Aplicando tentativa "+MatchChoices.LABELS[selections.get(clipIndex)]+
+        busy=true;refresh();say("Aplicando tentativa "+
+            (selections.get(clipIndex)==-1?"AUTO NATURAL":MatchChoices.LABELS[selections.get(clipIndex)])+
             " ao corte "+clipIndex+"; referência de cor fixa no Clip 1...");
         worker.submit(()->{
             try{
@@ -465,7 +486,7 @@ public class MainActivity extends Activity {
                     ends.add(compact(frameOffset(uri,true,500_000L)));
                     faces.add(lastFace);
                     nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector));
-                    modes.add(i==0?MatchChoices.ORIGINAL:MatchChoices.BALANCED);
+                    modes.add(i==0?MatchChoices.ORIGINAL:-1);
                     strengths.add(100);
                     zones.add(new int[]{100,100,100,100});
                     final int progressIndex=i+1;
@@ -543,6 +564,8 @@ public class MainActivity extends Activity {
                 comparison.addView(column,new LinearLayout.LayoutParams(0,-2,1f));
             }
             previews.addView(comparison);
+            previews.addView(button("AUTO NATURAL — recomendar para este corte",
+                v->chooseColor(clipIndex,-1)));
             HorizontalScrollView scroll=new HorizontalScrollView(this);
             LinearLayout variants=new LinearLayout(this);
             variants.setOrientation(LinearLayout.HORIZONTAL);
