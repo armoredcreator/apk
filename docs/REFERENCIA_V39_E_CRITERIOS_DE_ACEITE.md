@@ -27,3 +27,18 @@ O código Android atual contém a opção `ZOOM V37` e o motor `CinematicCutZoom
 - Conferir cor ao longo de toda cena 2 e ausência de mudança abrupta.
 - Repetir em pelo menos 3 outros pares para validar detecção automática (inclusive um par que não precise de zoom).
 - Registrar evidência audiovisual exportada **pelo app Android**, não apenas compilação do APK.
+
+
+## Implementação experimental posterior à 0.9.2 (branch de laboratório)
+
+- A `CinematicFollowMath` corrige deslocamento do assunto sem depender de um zoom fixo em torno do centro da tela.
+- O primeiro quadro da cena 2 usa a posição de referência do rosto da cena 1; os quadros seguintes usam a posição rastreada e suavizada na cena 2.
+- O recuo utiliza a curva monotônica original da `ZoomTimeline`. O protótipo anterior de retorno quase linear foi rejeitado e **não** foi incorporado.
+- A correção de posição é limitada pela margem real disponível no zoom para evitar bordas pretas. A posição volta rigorosamente à original quando o zoom chega a 1×.
+- A prévia e a exportação utilizam os mesmos parâmetros e a mesma trajetória.
+- O clipe 2, quando cortado no início, começa no pico do zoom: a contagem do recuo usa o tempo visível, não o timestamp da fonte pré-cortada.
+- A correção regional de cor permanece aplicada na cena 2 inteira, sem alterar o shader nesta etapa.
+- Este protótipo só faz rastreamento cinematográfico em **dois clipes**, quando a opção V39 está ligada. Uma política automática e robusta por corte para 3–16 clipes ainda requer implementação e validação próprias.
+- O caminho de enquadramento é uma tentativa algorítmica, **não** uma reconstrução exata da trajetória V39. Os originais 94/95 e um MP4 exportado pela versão experimental no celular são obrigatórios para certificar paridade.
+- Testes JVM/Gradle verificam limites matemáticos, compilação e regressão; não substituem inspeção audiovisual.
+- A referência original de 16 s deve permanecer intocada. Não publicar um APK como versão aprovada sem medição de escala/posição/brilho nos quadros 8–16 s e confirmação visual.
