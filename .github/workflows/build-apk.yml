@@ -25,7 +25,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Validar motor de cores (Java puro)
-        run: bash tests_jdk/run.sh
+        run: |
+          bash tests_jdk/run.sh
+          python3 tests_jdk/check_shader_contract.py
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
@@ -49,7 +51,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v0.2.0-alpha"
+          TAG="v0.2.1-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -57,7 +59,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.2 - APK experimental" \
-              --notes "APK de teste (debug). Compilado automaticamente, ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --title "FrameMatch Android 0.2.1 - cor SDR corrigida" \
+              --notes "APK debug de teste. Correção do desvio de gama no color match e zoom padrão desativado. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
               --prerelease
           fi
