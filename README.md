@@ -1,6 +1,14 @@
-# FrameMatch Android — port nativo, versão 0.2-dev (validação de compilação em GitHub Actions)
+# FrameMatch Android — port nativo, versão 0.2.1-alpha (validação de compilação em GitHub Actions)
 
 **Situação (28/10/2026): APK debug COMPILADO e testes Android PASSARAM no GitHub Actions. Ainda NÃO testado em um dispositivo Android real.** Não é uma cópia binária do programa Python/Tkinter para Windows; foi reimplementado em Java para Android.
+
+## Revisão de qualidade após teste real `84.mp4`
+
+- **Causa técnica identificada:** a prévia Java multiplicava ganhos em RGB, mas o shader da exportação usava uma ida e volta com `pow(...,1/2.2)` / `pow(...,2.2)`. Isso convertia cada ganho `g` em aproximadamente `g^2.2` (por exemplo, 1,20 → ~1,49). O shader SDR foi corrigido para usar o mesmo domínio RGB da prévia, sem elevar os ganhos.
+- **Padrões conservadores:** intensidade 65%, reenquadramento automático desmarcado; o zoom só é considerado se ativado manualmente, com liberação antes dos três segundos.
+- **Continuidade:** avalie principalmente os três primeiros segundos de cada próximo clipe. A cor deve permanecer consistente durante o clipe inteiro (não há desligamento abrupto da correção aos 3 segundos).
+- **Validação:** compilação Android e teste estático de contrato RGB não garantem equivalência visual no aparelho; ainda é obrigatório exportar um par real, avaliar céu, pele, lábios e áudio e comparar com a prévia. Sem teste de dispositivo não classificar como estável.
+
 
 ## Função e fluxo
 
