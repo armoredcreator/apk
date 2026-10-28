@@ -1,5 +1,4 @@
 import com.frame.framematch.ZoomTimeline;
-
 public final class ZoomTimelineSelfTest {
     private static void ok(boolean b, String message) {
         if (!b) throw new AssertionError(message);
@@ -9,39 +8,31 @@ public final class ZoomTimelineSelfTest {
             message + " actual=" + actual + " expected=" + expected);
     }
     public static void main(String[] args) {
-        final long duration = 8_000_000L, ramp = 3_000_000L;
-        final float peak = 1.33f;
-        near(ZoomTimeline.approach(0,duration,ramp,peak),1f,1e-6f,"unmodified beginning");
-        near(ZoomTimeline.approach(5_000_000L,duration,ramp,peak),1f,1e-6f,"approach starts 3s before cut");
-        near(ZoomTimeline.approach(duration,duration,ramp,peak),peak,1e-6f,"left side at cut");
-        near(ZoomTimeline.recede(0,duration,peak),peak,1e-6f,"right side at cut");
-        near(ZoomTimeline.recede(duration,duration,peak),1f,1e-6f,"full frame restored");
-        float previous = peak;
-        float maxStep = 0f;
+        long duration=8_000_000L, ramp=3_000_000L;
+        float peak=1.33f;
+        near(ZoomTimeline.approach(0,duration,ramp,peak),1f,1e-6f,"beginning unchanged");
+        near(ZoomTimeline.approach(5_000_000L,duration,ramp,peak),1f,1e-6f,"start 3s before cut");
+        near(ZoomTimeline.approach(duration,duration,ramp,peak),peak,1e-6f,"approach cut");
+        near(ZoomTimeline.recede(0,duration,peak),peak,1e-6f,"recede cut");
+        near(ZoomTimeline.recede(duration,duration,peak),1f,1e-6f,"recede end");
+        float previous=peak,maxStep=0f;
         for(int frame=1;frame<=192;frame++) {
-            long time=Math.round(frame * duration / 192d);
-            float current=ZoomTimeline.recede(time,duration,peak);
-            ok(current <= previous + 1e-6f,"recede must be monotone at frame " + frame);
-            ok(current >= 1f - 1e-6f,"recede must never overshoot");
-            maxStep=Math.max(maxStep, Math.abs(current-previous));
-            previous=current;
+            float now=ZoomTimeline.recede(Math.round(frame*duration/192d),duration,peak);
+            ok(now<=previous+1e-6f,"not monotonic at "+frame);
+            ok(now>=1f-1e-6f,"overshoot "+frame);
+            maxStep=Math.max(maxStep,previous-now);
+            previous=now;
         }
-        ok(maxStep < 0.004f,"no single-frame zoom release, max=" + maxStep);
-        // Same absolute source moment must produce same scale for cropped previews.
-        long previewStart=1_000_000L;
-        long elapsed=2_000_000L;
-        near(ZoomTimeline.recede(previewStart+elapsed,duration,peak),
-             ZoomTimeline.recede(3_000_000L,duration,peak),1e-6f,
-             "clipped preview and full export source timeline");
-        // Check speed and acceleration near the ends to avoid a stop/start jerk.
-        float frame1=ZoomTimeline.recede(41_667L,duration,peak);
-        float frame2=ZoomTimeline.recede(83_333L,duration,peak);
-        ok(Math.abs((peak-frame1)-(frame1-frame2)) < 0.0001f,
-           "recede must begin without a velocity step");
-        float end1=ZoomTimeline.recede(duration-41_667L,duration,peak);
-        float end2=ZoomTimeline.recede(duration-83_333L,duration,peak);
-        ok(Math.abs((end2-end1)-(end1-1f)) < 0.0001f,
-           "recede must end without a velocity step");
-        System.out.println("ZoomTimelineSelfTest OK: V39-target curve continuous, monotone, ends at 1.0");
+        ok(maxStep<0.0022f,"too fast middle frame: "+maxStep);
+        float a=ZoomTimeline.recede(41_667L,duration,peak);
+        float b=ZoomTimeline.recede(83_333L,duration,peak);
+        ok(Math.abs((peak-a)-(a-b))<0.0001f,"start jerk");
+        float c=ZoomTimeline.recede(duration-41_667L,duration,peak);
+        float e=ZoomTimeline.recede(duration-83_333L,duration,peak);
+        ok(Math.abs((e-c)-(c-1f))<0.0001f,"end jerk");
+        near(ZoomTimeline.recede(3_000_000L,duration,peak),
+             ZoomTimeline.recede(1_000_000L+2_000_000L,duration,peak),1e-6f,
+             "preview timeline");
+        System.out.println("ZoomTimelineSelfTest OK: smooth, slow and continuous; maxStep="+maxStep);
     }
 }
