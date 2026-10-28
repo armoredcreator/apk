@@ -10,19 +10,20 @@ import androidx.media3.effect.MatrixTransformation;
  * verified as pixel-equivalent to V39 on a physical Android device.
  *
  * One C2-continuous recede trajectory replaces the old segmented lookup.
+ * Timestamps are anchored to each clip's first frame, including for clipped previews.
  * No hard release, no midway scale reset, and no secondary zoom effect.
  */
 @UnstableApi
 public final class CinematicCutZoom implements MatrixTransformation {
     private final boolean approaching;
-    private final long sourceStartUs;
+    private final CinematicTimebase timebase;
     private final long durationUs;
     private final float peak;
 
     private CinematicCutZoom(boolean approaching, long startMs, long durationMs,
                              float zoomPercent) {
         this.approaching = approaching;
-        this.sourceStartUs = Math.max(0L, startMs) * 1000L;
+        this.timebase = new CinematicTimebase(startMs);
         this.durationUs = Math.max(1L, durationMs) * 1000L;
         this.peak = 1f + Math.max(0f, Math.min(0.5f, zoomPercent / 100f));
     }
@@ -36,7 +37,9 @@ public final class CinematicCutZoom implements MatrixTransformation {
     }
 
     public float scaleAt(long presentationTimeUs) {
-        long sourceUs = sourceStartUs + Math.max(0L, presentationTimeUs);
+        // Never pass a composition-global timestamp into an item-local timeline.
+        // Otherwise clip 2 can enter at scale 1.0 and skip the entire recede.
+        long sourceUs = timebase.sourceTimeUs(presentationTimeUs);
         return approaching
             ? ZoomTimeline.approach(sourceUs, durationUs, 3_000_000L, peak)
             : ZoomTimeline.recede(sourceUs, durationUs, peak);
