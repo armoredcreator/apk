@@ -16,6 +16,16 @@
 7. Múltiplos clipes: decidir e validar cada fronteira de maneira independente, preservando decisões já aprovadas. Se um efeito não for necessário, não aplicar.
 8. «Não demonstrado» é estado de análise válido. Não alegar qualidade perfeita sem assistir e medir **o vídeo completo**.
 
+## Estado da implementação Android V39
+
+A implementação está disponível na branch `feature/v39-implementation-20261028`, na PR #4.
+
+- Cada fronteira gera um plano independente: aproximação antecipada no fim do clipe anterior e recuo suave desde o primeiro quadro do próximo.
+- O mesmo plano é usado na prévia da transição e na exportação Media3.
+- O exemplo de 33% continua sendo apenas um caso de referência; os parâmetros são medidos por corte.
+- A versão compilada é `0.9.0-v39-alpha`; o CI passou em testes Java, testes Android e `:app:assembleDebug`.
+- Ainda falta a validação visual no aparelho real comparando a exportação Android com `FrameMatch_V39_V37_BRILHO_ESTAVEL.mp4`.
+
 ## Sequência de implementação (ainda pendente)
 1. Extrair métricas robustas de frames de corte, rosto, fundo, cor e movimento, mais janela de 3+ segundos antes/depois de cada corte.
 2. Elaborar candidatos: sem efeito, cor, enquadramento, zoom antecipado + retorno. Estimar parâmetros por corte, não usar constantes V39 como universal.
