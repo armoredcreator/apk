@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
         container.setPadding(dp(14),dp(16),dp(14),dp(22));scroller.addView(container);
         setContentView(scroller);
         TextView title=text("FrameMatch Android",22,true); container.addView(title);
-        subtitle=text("Último quadro → primeiro quadro • correção de cor automática • unir clipes",13,false);
+        subtitle=text("CLIP 1 = referência de COR fixa | cortes adjacentes = movimento e enquadramento",13,false);
         container.addView(subtitle);
         addButton=button("+ ADICIONAR VÍDEOS",v->pick()); container.addView(addButton);
         clipList=new LinearLayout(this); clipList.setOrientation(LinearLayout.VERTICAL);container.addView(clipList);
@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
             @Override public void onStartTrackingTouch(SeekBar b){}
             @Override public void onStopTrackingTouch(SeekBar b){}
         });
-        container.addView(text("Após analisar, compare cinco alternativas em cada corte e marque a sua favorita. A escolha será usada no MP4.",12,false));
+        container.addView(text("O Clip 1 é a referência de cor fixa para TODOS os próximos clipes. Compare seis tentativas em cada corte e escolha a melhor.",12,false));
         analyzeButton=button("GERAR TENTATIVAS DE COR PARA CADA CORTE",v->analyze());
         container.addView(analyzeButton);
         previews=new LinearLayout(this); previews.setOrientation(LinearLayout.VERTICAL);container.addView(previews);
@@ -206,54 +206,69 @@ public class MainActivity extends Activity {
         return copy;
     }
 
-    /** Recompute the chain from its beginning: a decision at cut 1 changes cut 2's reference. */
+    /**
+     * Clip 1 supplies the immutable color reference for EVERY subsequent clip.
+     * Previous clip is consulted only for alignment and a visual side-by-side
+     * preview; its selected color plan must not enter a later color calibration.
+     */
     private MatchResult computeChoices(ArrayList<Bitmap> firsts,ArrayList<Bitmap> lasts,
                                        ArrayList<Bitmap> earlys,ArrayList<Bitmap> ends,
                                        ArrayList<RegionMath.FaceBox> lastFaces,
                                        ArrayList<FaceTimeline> faceTracks,
-                                       ArrayList<Integer> modes,ArrayList<Integer> strengths,ArrayList<int[]> zones,float strength,
+                                       ArrayList<Integer> modes,ArrayList<Integer> strengths,
+                                       ArrayList<int[]> zones,float strength,
                                        boolean regional,boolean align) {
         MatchResult output=new MatchResult();
         output.selected.add(RegionMath.Plan.identity());
         output.variants.add(MatchChoices.candidates(RegionMath.Plan.identity()));
         output.alignments.add(null);
+
+        final Bitmap masterLast=lasts.get(0);
+        final Bitmap masterNear=ends.get(0);
+        final RegionMath.FaceBox masterFace=lastFaces.get(0);
+        final MasterColorMatch.Sample masterBoundary=new MasterColorMatch.Sample(
+            pixels(masterLast),masterLast.getWidth(),masterLast.getHeight(),masterFace);
+        final MasterColorMatch.Sample masterNearby=new MasterColorMatch.Sample(
+            pixels(masterNear),masterNear.getWidth(),masterNear.getHeight(),masterFace);
+
         for(int i=1;i<firsts.size();i++){
-            RegionMath.FaceBox refFace=lastFaces.get(i-1);
-            RegionMath.Plan previous=output.selected.get(i-1);
-            Bitmap reference=grade(lasts.get(i-1),previous,refFace);
-            Bitmap nearReference=grade(ends.get(i-1),previous,refFace);
+            // Camera motion follows clip i-1; colors ALWAYS follow clip 1.
+            RegionMath.FaceBox adjacentFace=lastFaces.get(i-1);
             Bitmap target=firsts.get(i);
             FaceTimeline timeline=faceTracks.get(i);
             RegionMath.FaceBox firstFace=timeline==null?null:timeline.first();
             RegionMath.Plan calibrated=RegionMath.Plan.identity();
             if(regional){
-                calibrated=RegionMath.analyze(pixels(reference),reference.getWidth(),reference.getHeight(),refFace,
-                    pixels(target),target.getWidth(),target.getHeight(),firstFace,strength);
                 RegionMath.FaceBox earlyFace=timeline==null?null:timeline.at(500_000L);
-                RegionMath.Plan second=RegionMath.analyze(
-                    pixels(nearReference),nearReference.getWidth(),nearReference.getHeight(),refFace,
-                    pixels(earlys.get(i)),earlys.get(i).getWidth(),earlys.get(i).getHeight(),earlyFace,strength);
-                calibrated=RegionMath.blendStable(calibrated,second);
+                calibrated=MasterColorMatch.calibrate(masterBoundary,masterNearby,
+                    new MasterColorMatch.Sample(pixels(target),target.getWidth(),target.getHeight(),firstFace),
+                    new MasterColorMatch.Sample(pixels(earlys.get(i)),earlys.get(i).getWidth(),
+                        earlys.get(i).getHeight(),earlyFace),strength);
             }
-            RegionMath.Plan[] alternatives=MatchChoices.candidates(calibrated,strengths.get(i),zones.get(i));
+            RegionMath.Plan[] choices=MatchChoices.candidates(calibrated,strengths.get(i),zones.get(i));
             int mode=modes.get(i);
             if(!MatchChoices.valid(mode))throw new IllegalArgumentException("Tentativa de cor inválida");
-            output.variants.add(alternatives);
-            output.selected.add(alternatives[mode]);
-            ContinuityZoom zoom=align?ContinuityZoom.plan(timeline,refFace):null;
+            output.variants.add(choices);
+            output.selected.add(choices[mode]);
+
+            ContinuityZoom zoom=align?ContinuityZoom.plan(timeline,adjacentFace):null;
             output.alignments.add(zoom);
 
-            Bitmap[] previews=new Bitmap[2+MatchChoices.COUNT];
-            previews[0]=small(reference);
-            previews[1]=small(target);
+            // The two references are intentionally different: master colors vs. local cut.
+            Bitmap previousPreview=i==1?lasts.get(0)
+                :grade(lasts.get(i-1),output.selected.get(i-1),adjacentFace);
+            Bitmap[] previews=new Bitmap[3+MatchChoices.COUNT];
+            previews[0]=small(masterLast);
+            previews[1]=small(previousPreview);
+            previews[2]=small(target);
             for(int m=0;m<MatchChoices.COUNT;m++){
-                Bitmap p=m==MatchChoices.ORIGINAL?target:grade(target,alternatives[m],firstFace);
+                Bitmap p=m==MatchChoices.ORIGINAL?target:grade(target,choices[m],firstFace);
                 if(zoom!=null)p=zoom.preview(p);
-                previews[2+m]=small(p);
+                previews[3+m]=small(p);
+                if(p!=target && p!=previews[3+m] && !p.isRecycled())p.recycle();
             }
             output.previewRows.add(previews);
-            reference.recycle();
-            nearReference.recycle();
+            if(i>1 && !previousPreview.isRecycled())previousPreview.recycle();
         }
         return output;
     }
@@ -265,7 +280,7 @@ public class MainActivity extends Activity {
         analyzed=true;analyzedStrength=intensity.getProgress()/100f;
         busy=false;progress.setProgress(100);
         renderPreviews(result.previewRows);refresh();
-        say("Análise pronta: escolha uma das seis tentativas por corte. O MP4 usa as opções marcadas.");
+        say("Clip 1 é a referência MESTRA para todas as cenas. Escolha a correção de cada corte.");
     }
 
     private void chooseColor(int clipIndex,int mode){
@@ -301,7 +316,7 @@ public class MainActivity extends Activity {
         final float strength=intensity.getProgress()/100f;
         final boolean regional=regionSwitch.isChecked(),align=alignSwitch.isChecked();
         busy=true;refresh();say("Aplicando tentativa "+MatchChoices.LABELS[selections.get(clipIndex)]+
-            " ao corte "+clipIndex+" e atualizando as próximas referências...");
+            " ao corte "+clipIndex+"; referência de cor fixa no Clip 1...");
         worker.submit(()->{
             try{
                 MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,
@@ -404,11 +419,11 @@ public class MainActivity extends Activity {
             final int clipIndex=i+1;
             Bitmap[] pictures=rows.get(i);
             previews.addView(text("CORTE "+clipIndex+" → "+(clipIndex+1)+
-                " | escolha a tentativa que mais combina com o fim do anterior",13,true));
+                " | cor acompanha Clip 1; enquadramento acompanha a cena anterior",13,true));
             LinearLayout comparison=new LinearLayout(this);
             comparison.setOrientation(LinearLayout.HORIZONTAL);
-            String[] labels={"Fim anterior","Início original"};
-            for(int j=0;j<2;j++){
+            String[] labels={"CLIP 1: cores","Fim anterior","Início original"};
+            for(int j=0;j<3;j++){
                 LinearLayout column=new LinearLayout(this);
                 column.setOrientation(LinearLayout.VERTICAL);
                 ImageView image=new ImageView(this);
@@ -428,7 +443,7 @@ public class MainActivity extends Activity {
                 card.setOrientation(LinearLayout.VERTICAL);
                 card.setPadding(dp(3),dp(4),dp(3),dp(5));
                 ImageView image=new ImageView(this);
-                image.setImageBitmap(pictures[2+m]);
+                image.setImageBitmap(pictures[3+m]);
                 image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                 card.addView(image,new LinearLayout.LayoutParams(dp(126),dp(210)));
                 boolean marked=selectedModes.get(clipIndex)==m;
@@ -476,7 +491,7 @@ public class MainActivity extends Activity {
                 }
             }
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
-                " · As cenas seguintes são recalibradas se esta opção mudar.",11,false));
+                " · Referência de cor fixa no Clip 1. Outros cortes não mudam.",11,false));
         }
     }
 
