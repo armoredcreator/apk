@@ -68,6 +68,7 @@ public class MainActivity extends Activity {
     // Lower resolution cached boundary frames avoid rescanning videos when changing a look.
     private final ArrayList<Bitmap> firstFrames=new ArrayList<>(), lastFrames=new ArrayList<>();
     private final ArrayList<Bitmap> earlyFrames=new ArrayList<>(), nearEndFrames=new ArrayList<>();
+    private final ArrayList<Bitmap> oneSecondFrames=new ArrayList<>(), oneSecondBeforeEndFrames=new ArrayList<>();
     private final ArrayList<RegionMath.FaceBox> endFaces=new ArrayList<>();
     private final ArrayList<AlignmentMath.Pose> startPoses=new ArrayList<>(), endPoses=new ArrayList<>();
     private final ArrayList<Long> entryOffsetsMs=new ArrayList<>();
@@ -219,7 +220,7 @@ public class MainActivity extends Activity {
     private void invalidateAnalysis(){
         analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
         selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
-        nearEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();previews.removeAllViews();
+        nearEndFrames.clear();oneSecondFrames.clear();oneSecondBeforeEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();previews.removeAllViews();
     }
     private void refresh(){
         clipList.removeAllViews();
@@ -358,6 +359,7 @@ public class MainActivity extends Activity {
      */
     private MatchResult computeChoices(ArrayList<Bitmap> firsts,ArrayList<Bitmap> lasts,
                                        ArrayList<Bitmap> earlys,ArrayList<Bitmap> ends,
+                                       ArrayList<Bitmap> laterFrames,ArrayList<Bitmap> earlierEnds,
                                        ArrayList<RegionMath.FaceBox> lastFaces,
                                        ArrayList<AlignmentMath.Pose> firstLandmarks,
                                        ArrayList<AlignmentMath.Pose> lastLandmarks,
@@ -373,11 +375,14 @@ public class MainActivity extends Activity {
 
         final Bitmap masterLast=lasts.get(0);
         final Bitmap masterNear=ends.get(0);
+        final Bitmap masterEarlier=earlierEnds.get(0);
         final RegionMath.FaceBox masterFace=lastFaces.get(0);
         final MasterColorMatch.Sample masterBoundary=new MasterColorMatch.Sample(
             pixels(masterLast),masterLast.getWidth(),masterLast.getHeight(),masterFace);
         final MasterColorMatch.Sample masterNearby=new MasterColorMatch.Sample(
             pixels(masterNear),masterNear.getWidth(),masterNear.getHeight(),masterFace);
+        final MasterColorMatch.Sample masterThird=new MasterColorMatch.Sample(
+            pixels(masterEarlier),masterEarlier.getWidth(),masterEarlier.getHeight(),masterFace);
 
         for(int i=1;i<firsts.size();i++){
             // Camera motion follows clip i-1; colors ALWAYS follow clip 1.
@@ -388,10 +393,24 @@ public class MainActivity extends Activity {
             RegionMath.Plan calibrated=RegionMath.Plan.identity();
             if(regional){
                 RegionMath.FaceBox earlyFace=timeline==null?null:timeline.at(500_000L);
-                calibrated=MasterColorMatch.calibrate(masterBoundary,masterNearby,
-                    new MasterColorMatch.Sample(pixels(target),target.getWidth(),target.getHeight(),firstFace),
-                    new MasterColorMatch.Sample(pixels(earlys.get(i)),earlys.get(i).getWidth(),
-                        earlys.get(i).getHeight(),earlyFace),strength);
+                MasterColorMatch.Sample targetFirst=new MasterColorMatch.Sample(
+                    pixels(target),target.getWidth(),target.getHeight(),firstFace);
+                MasterColorMatch.Sample targetNear=new MasterColorMatch.Sample(
+                    pixels(earlys.get(i)),earlys.get(i).getWidth(),earlys.get(i).getHeight(),earlyFace);
+                Bitmap later=laterFrames.get(i);
+                RegionMath.FaceBox laterFace=timeline==null?null:timeline.at(1_000_000L);
+                MasterColorMatch.Sample targetThird=new MasterColorMatch.Sample(
+                    pixels(later),later.getWidth(),later.getHeight(),laterFace);
+                RegionMath.Plan a=RegionMath.analyze(masterBoundary.argb,masterBoundary.width,
+                    masterBoundary.height,masterBoundary.face,targetFirst.argb,targetFirst.width,
+                    targetFirst.height,targetFirst.face,strength);
+                RegionMath.Plan b=RegionMath.analyze(masterNearby.argb,masterNearby.width,
+                    masterNearby.height,masterNearby.face,targetNear.argb,targetNear.width,
+                    targetNear.height,targetNear.face,strength);
+                RegionMath.Plan c=RegionMath.analyze(masterThird.argb,masterThird.width,
+                    masterThird.height,masterThird.face,targetThird.argb,targetThird.width,
+                    targetThird.height,targetThird.face,strength);
+                calibrated=TemporalColor.consolidate(a,b,c);
             }
             RegionMath.Plan[] choices=MatchChoices.candidates(calibrated,strengths.get(i),zones.get(i));
             int mode=modes.get(i);
@@ -483,7 +502,7 @@ public class MainActivity extends Activity {
         worker.submit(()->{
             try{
                 MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,
-                    endFaces,startPoses,endPoses,tracks,selections,strengths,zones,strength,regional,align);
+                    oneSecondFrames,oneSecondBeforeEndFrames,endFaces,startPoses,endPoses,tracks,selections,strengths,zones,strength,regional,align);
                 main.post(()->{if(!ended)installResult(result);});
             }catch(Exception e){main.post(()->{
                 busy=false;analyzed=false;refresh();
@@ -504,6 +523,7 @@ public class MainActivity extends Activity {
             try{
                 ArrayList<Bitmap> firsts=new ArrayList<>(), lasts=new ArrayList<>();
                 ArrayList<Bitmap> earlys=new ArrayList<>(), ends=new ArrayList<>();
+                ArrayList<Bitmap> later=new ArrayList<>(), earlierEnds=new ArrayList<>();
                 ArrayList<RegionMath.FaceBox> faces=new ArrayList<>();
                 ArrayList<AlignmentMath.Pose> beginPose=new ArrayList<>(),finalPose=new ArrayList<>();
                 ArrayList<FaceTimeline> nextTracks=new ArrayList<>();
@@ -539,6 +559,8 @@ public class MainActivity extends Activity {
                     lasts.add(compact(last));
                     earlys.add(compact(frameOffset(uri,false,(selectedOffset+500)*1000L)));
                     ends.add(compact(frameOffset(uri,true,500_000L)));
+                    later.add(compact(frameOffset(uri,false,(selectedOffset+1000)*1000L)));
+                    earlierEnds.add(compact(frameOffset(uri,true,1_000_000L)));
                     faces.add(lastFace);
                     nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector));
                     modes.add(i==0?MatchChoices.ORIGINAL:-1);
@@ -548,7 +570,7 @@ public class MainActivity extends Activity {
                     main.post(()->{progress.setProgress(progressIndex*50/selected.size());
                         say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
-                MatchResult result=computeChoices(firsts,lasts,earlys,ends,faces,beginPose,finalPose,nextTracks,
+                MatchResult result=computeChoices(firsts,lasts,earlys,ends,later,earlierEnds,faces,beginPose,finalPose,nextTracks,
                     modes,strengths,zones,strength,regional,align);
                 main.post(()->{
                     if(ended)return;
@@ -556,6 +578,8 @@ public class MainActivity extends Activity {
                     lastFrames.clear();lastFrames.addAll(lasts);
                     earlyFrames.clear();earlyFrames.addAll(earlys);
                     nearEndFrames.clear();nearEndFrames.addAll(ends);
+                    oneSecondFrames.clear();oneSecondFrames.addAll(later);
+                    oneSecondBeforeEndFrames.clear();oneSecondBeforeEndFrames.addAll(earlierEnds);
                     endFaces.clear();endFaces.addAll(faces);
                     startPoses.clear();startPoses.addAll(beginPose);
                     entryOffsetsMs.clear();entryOffsetsMs.addAll(entries);
