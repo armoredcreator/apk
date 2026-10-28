@@ -51,7 +51,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v0.4.0-alpha"
+          git fetch --depth=1 origin feature/framematch-android
+          CURRENT_BRANCH_SHA="$(git rev-parse FETCH_HEAD)"
+          if [ "$CURRENT_BRANCH_SHA" != "$GITHUB_SHA" ]; then
+            echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
+            exit 0
+          fi
+          TAG="v0.4.1-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -59,7 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.4.0 - modos de correção por cena" \
-              --notes "APK debug de teste. Seis opções de cor por transição, intensidade independente e ajustes locais de cenário, céu, pele e lábios; zoom desativado por padrão. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
+              --title "FrameMatch Android 0.4.1 - opções e ajustes finos por corte" \
+              --notes "APK debug de teste. Seis opções por transição, regulagem independente por corte e ajuste fino separado de cenário, céu, pele e lábios; zoom desativado por padrão. Ainda não validado em celular real. Instale apenas se aceitar testar uma versão experimental." \
               --prerelease
           fi
