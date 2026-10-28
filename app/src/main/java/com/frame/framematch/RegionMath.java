@@ -100,13 +100,13 @@ public final class RegionMath {
         float[] ra=calibrated[0]?a[0].robust():global(ref);
         float[] ta=calibrated[0]?b[0].robust():global(tar);
         float s=clamp(strength,0f,1f);
-        for(int c=0;c<3;c++)out[0][c]=1+s*(clamp(ra[c]/Math.max(25,ta[c]),.82f,1.20f)-1);
+        for(int c=0;c<3;c++)out[0][c]=1+s*(clamp(ra[c]/Math.max(25,ta[c]),.85f,1.15f)-1);
         for(int k=1;k<4;k++){
             calibrated[k]=a[k].count>=(k==LIPS?12:32) && b[k].count>=(k==LIPS?12:32);
             float[] aa=a[k].robust(),bb=b[k].robust();
             for(int c=0;c<3;c++){
                 float extra=calibrated[k] ? aa[c]/Math.max(24,bb[c]*out[0][c]) : 1;
-                out[k][c]=1+s*(clamp(extra,k==LIPS?.87f:.83f,k==LIPS?1.15f:1.20f)-1);
+                out[k][c]=1+s*(clamp(extra,k==SKY?.85f:.90f,k==SKY?1.15f:1.10f)-1);
             }
         }
         return new Plan(out,calibrated,s);
@@ -116,21 +116,76 @@ public final class RegionMath {
         for(int i=0;i<max;i++)s.accept(a[(int)((long)i*a.length/max)]);
         return s.robust();
     }
-    private static int adjusted(int pixel,float[] base,float[] region){
-        int[] v={pixel>>16&255,pixel>>8&255,pixel&255};
-        int r=(int)clamp(Math.round(v[0]*base[0]*region[0]),0,255);
-        int g=(int)clamp(Math.round(v[1]*base[1]*region[1]),0,255);
-        int b=(int)clamp(Math.round(v[2]*base[2]*region[2]),0,255);
-        return (pixel&0xff000000)|(r<<16)|(g<<8)|b;
+    /**
+     * Blend two early color estimates only when they agree. A passing flashlight,
+     * exposure pulse or actor movement must not redefine the grade for an entire clip.
+     */
+    public static Plan blendStable(Plan first,Plan followup) {
+        float[][] gains=new float[4][3];
+        boolean[] calibrated=first.calibrated.clone();
+        for(int k=0;k<4;k++)for(int c=0;c<3;c++) {
+            float a=first.gains[k][c], b=followup.gains[k][c];
+            gains[k][c]=(k==BACKGROUND||followup.calibrated[k]) && Math.abs(a-b)<=.075f
+                ? .8f*a+.2f*b : a;
+        }
+        return new Plan(gains,calibrated,first.strength);
     }
-    /** CPU preview only; export uses matching GPU masks in RegionEffect. */
+    private static float smoothstep(float a,float b,float x) {
+        float t=clamp((x-a)/(b-a),0f,1f);
+        return t*t*(3f-2f*t);
+    }
+    private static float ovalWeight(float x,float y,float cx,float cy,float rx,float ry) {
+        if(rx<=0.0001f||ry<=0.0001f)return 0f;
+        float dx=(x-cx)/rx,dy=(y-cy)/ry;
+        return 1f-smoothstep(.75f,1.18f,dx*dx+dy*dy);
+    }
+    private static float[] maskWeights(int pixel,float x,float y,FaceBox f) {
+        float r=((pixel>>16)&255)/255f,g=((pixel>>8)&255)/255f,b=(pixel&255)/255f;
+        float lum=.299f*r+.587f*g+.114f*b;
+        float cr=.5f+.713f*(r-lum),cb=.5f+.564f*(b-lum);
+        float isSkin=smoothstep(.51f,.54f,cr)*(1-smoothstep(.69f,.72f,cr))
+            *smoothstep(.29f,.32f,cb)*(1-smoothstep(.53f,.56f,cb));
+        float isSky=smoothstep(.035f,.10f,b-r)*smoothstep(.014f,.07f,b-g)
+            *smoothstep(.12f,.20f,b);
+        float face=0f,lips=0f;
+        if(f!=null && f.valid()) {
+            face=ovalWeight(x,y,f.x+.5f*f.w,f.y+.49f*f.h,.48f*f.w,.48f*f.h)*isSkin;
+            lips=ovalWeight(x,y,f.x+.5f*f.w,f.y+.75f*f.h,.23f*f.w,.10f*f.h)*isSkin;
+        }
+        return new float[]{isSky*(1f-face),face*(1f-lips),lips,lum};
+    }
+    private static int adjusted(int pixel,float[] base,float[] sky,float[] skin,float[] lips,
+                                float[] weights) {
+        float lum=weights[3];
+        float fade=.35f+.65f*smoothstep(.02f,.12f,lum)
+                *(1f-smoothstep(.84f,.98f,lum));
+        int argb=pixel&0xff000000;
+        for(int c=0;c<3;c++) {
+            int bit=(2-c)*8;
+            float raw=(pixel>>bit)&255;
+            float gain=base[c]
+                    *(1f+(sky[c]-1f)*weights[0])
+                    *(1f+(skin[c]-1f)*weights[1])
+                    *(1f+(lips[c]-1f)*weights[2]);
+            // Global and regional multipliers must not amplify each other unchecked.
+            gain=clamp(gain,.84f,1.18f);
+            int result=Math.round(clamp(raw*(1f+(gain-1f)*fade),0,255));
+            argb|=result<<bit;
+        }
+        return argb;
+    }
+    /** CPU preview uses the same soft masks, gain limits and tonal protection as the shader. */
     public static int[] preview(int[] source,int width,int height,FaceBox face,Plan plan){
         int[] dst=source.clone();
         for(int i=0;i<dst.length;i++){
-            int cls=classify(source[i],(i%width+.5f)/width,(i/width+.5f)/height,face);
-            dst[i]=adjusted(source[i],plan.gains[0],cls!=BACKGROUND&&plan.calibrated[cls]
-                    ?plan.gains[cls]:ONE);
+            float x=(i%width+.5f)/width,y=(i/width+.5f)/height;
+            float[] weights=maskWeights(source[i],x,y,face);
+            dst[i]=adjusted(source[i],plan.gains[0],
+                    plan.calibrated[SKY]?plan.gains[SKY]:ONE,
+                    plan.calibrated[SKIN]?plan.gains[SKIN]:ONE,
+                    plan.calibrated[LIPS]?plan.gains[LIPS]:ONE,weights);
         }
         return dst;
     }
+
 }
