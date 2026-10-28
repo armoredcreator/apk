@@ -8,10 +8,10 @@ public final class MatchChoicesSelfTest {
             {1.08f,.95f,1.05f},{1.09f,.91f,1.03f}};
         RegionMath.Plan p=new RegionMath.Plan(gains,new boolean[]{true,true,true,true},.65f);
         RegionMath.Plan[] choices=MatchChoices.candidates(p);
-        ok(choices.length==5,"five alternatives");
+        ok(choices.length==6,"six alternatives");
         ok(MatchChoices.LABELS.length==MatchChoices.COUNT,"all labels");
         for(int i=0;i<MatchChoices.COUNT;i++)ok(MatchChoices.valid(i),"mode "+i);
-        ok(!MatchChoices.valid(-1)&&!MatchChoices.valid(5),"reject invalid choices");
+        ok(!MatchChoices.valid(-1)&&!MatchChoices.valid(6),"reject invalid choices");
         near(choices[MatchChoices.ORIGINAL].gains[0][0],1f,"original no grade");
         near(choices[MatchChoices.SOFT].gains[0][0],1.054f,"soft reduced");
         near(choices[MatchChoices.BALANCED].gains[0][0],1.12f,"balanced original plan");
@@ -34,6 +34,11 @@ public final class MatchChoicesSelfTest {
         near(MatchChoices.candidates(p,250)[MatchChoices.BALANCED].gains[0][0],1.18f,"bounded intensity");
         near(MatchChoices.candidates(p,-99)[MatchChoices.BALANCED].gains[0][0],1f,"negative intensity clamped");
         near(p.gains[0][0],1.12f,"source gains preserved");
-        System.out.println("MatchChoices: 20 checks OK");
+        RegionMath.Plan[] manual=MatchChoices.candidates(p,100,new int[]{80,125,25,50});
+        near(manual[MatchChoices.CUSTOM].gains[RegionMath.BACKGROUND][0],1.096f,"custom background");
+        near(manual[MatchChoices.CUSTOM].gains[RegionMath.SKY][0],1.125f,"custom sky");
+        near(manual[MatchChoices.CUSTOM].gains[RegionMath.SKIN][0],1.02f,"custom skin");
+        near(manual[MatchChoices.CUSTOM].gains[RegionMath.LIPS][0],1.045f,"custom lips");
+        System.out.println("MatchChoices: 24 checks OK");
     }
 }
