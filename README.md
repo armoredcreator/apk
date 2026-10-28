@@ -11,6 +11,15 @@
 
 
 
+## Regra obrigatória: Clip 1 é a referência MESTRA de cor (v0.4.2-alpha)
+
+- **Toda calibração de cor dos Clipes 2, 3, 4…16 é feita diretamente a partir de dois quadros próximos do final do Clip 1.** As cores do Clip 1 não são modificadas.
+- **Não há cascata de cor.** Ajustar o Clip 2 não muda a paleta que determina a correção do Clip 3, e assim sucessivamente. Cada clipe tem sua seleção entre seis opções e intensidade independente; essas escolhas nunca alteram a referência-mestra.
+- A prévia mostra três quadros antes das alternativas: **Clip 1 (cores)**, **fim do clipe anterior (continuidade de corte)** e **início original do clipe atual**. Enquadramento opcional usa apenas a cena anterior e fica restrito aos primeiros 2,8 segundos.
+- A referência de cor é obtida dos quadros finais do Clip 1. Caso haja mudança significativa de iluminação dentro do próprio Clip 1, ainda é preciso futura referência temporal/por regiões mais sofisticada; não garantimos cor perfeita em qualquer situação.
+- Os ganhos de cor são aplicados de forma estável ao clipe; não há desligamento repentino da correção após três segundos.
+- O código Java puro tem teste de regressão verificando que o Clip 3 continua ancorado no Clip 1, independentemente da escolha do Clip 2.
+
 ## Tentativas por corte — versão 0.4.1-alpha
 
 A correção não depende de vídeos específicos: cada corte entre clipes recebe seis alternativas (cinco estratégias mais ajuste fino) geradas automaticamente a partir dos quadros dos próprios arquivos.
@@ -22,7 +31,7 @@ A correção não depende de vídeos específicos: cada corte entre clipes receb
 - **Priorizar pele:** reduz a correção global, mantém pele/lábios e deixa céu sem ajuste local.
 - **Ajuste fino:** controle independente de cenário, céu/azul, pele e lábios para aquele corte.
 
-Após clicar **GERAR TENTATIVAS DE COR PARA CADA CORTE**, deslize horizontalmente pelas opções de cada transição. Ajuste também a **intensidade do corte (0–150%)** sem afetar as demais cenas. Toque na alternativa desejada: o app recalcula a referência de cor de todos os cortes seguintes sem precisar reler os vídeos ou repetir a detecção facial. O MP4 exportado usa **uma escolha independente por corte**, não apenas a intensidade global.
+Após clicar **GERAR TENTATIVAS DE COR PARA CADA CORTE**, deslize horizontalmente pelas opções de cada transição. Ajuste também a **intensidade do corte (0–150%)** sem afetar as demais cenas. Toque na alternativa desejada: o app atualiza as prévias dos cortes, mas mantém a referência global fixa no Clip 1 sem precisar reler os vídeos ou repetir a detecção facial. O MP4 exportado usa **uma escolha independente por corte**, não apenas a intensidade global.
 
 **Importante:** cada tentativa é uma heurística, não um resultado profissional garantido. As miniaturas usam o motor CPU e a exportação utiliza máscaras equivalentes no shader; pequenas diferenças de renderização do aparelho podem permanecer. A cor escolhida é aplicada de forma estável ao clipe inteiro; o **reenquadramento opcional** é limitado aos primeiros 2,8 segundos. A opção original evita o shader de correção daquele clipe. Os arquivos de entrada são preservados.
 
