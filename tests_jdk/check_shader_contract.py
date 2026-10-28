@@ -13,7 +13,7 @@ assert 'float fade=.35+.65*smoothstep(.02,.12,lum)' in shader, "protect shadows 
 math=Path("app/src/main/java/com/frame/framematch/RegionMath.java").read_text(encoding="utf-8")
 assert 'gain=clamp(gain,.84f,1.18f)' in math, "preview must use identical bounds"
 assert 'float fade=.35f+.65f*smoothstep(.02f,.12f,lum)' in math, "preview needs tonal protection"
-assert 'blendStable' in math and 'frameOffset(selected.get(i),false,500_000L)' in main, "early boundary sample is missing"
+assert 'blendStable' in math and 'compact(frameOffset(uri,false,500_000L))' in main, "early boundary sample is missing"
 assert 'release=2_800_000L' in Path("app/src/main/java/com/frame/framematch/ContinuityZoom.java").read_text(encoding="utf-8")
 choices=Path("app/src/main/java/com/frame/framematch/MatchChoices.java").read_text(encoding="utf-8")
 assert 'public static final int COUNT=5' in choices
