@@ -1,6 +1,8 @@
-# FrameMatch Android — port nativo, versão 0.2.1-alpha (validação de compilação em GitHub Actions)
+# FrameMatch Android — port nativo, versão 0.9.0-v39-alpha (implementação V39 em validação)
 
-**Situação (28/10/2026): APK debug COMPILADO e testes Android PASSARAM no GitHub Actions. Ainda NÃO testado em um dispositivo Android real.** Não é uma cópia binária do programa Python/Tkinter para Windows; foi reimplementado em Java para Android.
+**Situação (28/10/2026): a implementação V39 foi compilada e os testes Android PASSARAM no GitHub Actions. Ainda NÃO foi comparada em um dispositivo Android real com o MP4 V39 aprovado.**
+
+A V39 aplica geometria por fronteira: aproximação antecipada no final do clipe anterior e recuo lento, contínuo e adaptativo no clipe seguinte. O valor de 33% não é usado como constante global. Não é uma cópia binária do programa Python/Tkinter para Windows; foi reimplementado em Java para Android.
 
 ## Revisão de qualidade após teste real `84.mp4`
 
