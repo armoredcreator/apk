@@ -11,6 +11,21 @@
 
 
 
+## Versão 0.5.0-alpha — Qualidade e naturalidade
+
+**Clip 1 = referência de cor fixa para todos os clipes**, e agora também pode definir o padrão de saída (resolução/proporção, bitrate solicitado e limite de FPS quando disponível). A resolução de referência respeita o teto conservador de 1920 pixels no maior lado, para evitar falhas em Android mais antigo; a codificação H.264/AAC e as limitações do hardware podem alterar os parâmetros solicitados. Uma exportação com os mesmos parâmetros não recupera nitidez de vídeos originalmente piores.
+
+O motor **Auto Natural** escolhe por padrão uma dentre seis tentativas para cada clipe, comparando dois quadros próximos do começo do clipe com dois quadros do final do Clip 1. A decisão usa discrepâncias de cor por região e penaliza mudanças excessivas. É uma heurística conservadora de correspondência; não é um modelo de restauração com IA e não garante correspondência perfeita em qualquer conteúdo.
+
+Controles adicionados:
+- **AUTO NATURAL (todos):** recalcula e escolhe uma tentativa para cada cena independentemente, preservando o Clip 1 como paleta mestra;
+- **AUTO NATURAL (por corte):** reavalia uma transição específica sem alterar outras escolhas de cor;
+- **Ativar todas as correções compatíveis:** liga máscara regional, zoom experimental, normalização de resolução, solicitação de bitrate e limite de FPS. O zoom é opcional e pode provocar cortes indesejados; desligue-o se o quadro ficar apertado. Os seis looks de cor continuam mutuamente exclusivos e o ajuste fino permite regiões combinadas.
+- **Aplicar a mesma tentativa a todos:** copia apenas o estilo/intensidade escolhido, mas calibra cada cena diretamente contra o Clip 1.
+- **Ver qualidade exportada:** após a codificação, informa a resolução e a taxa de bits reportadas pelo arquivo produzido.
+
+O critério principal de continuidade visual é o começo de cada clipe. Reenquadramento, quando ativado, termina antes de 3 segundos; correção de cor é constante no clipe inteiro para não criar uma mudança brusca aos 3 segundos. O áudio e os originais são preservados; a qualidade visual real exige teste e comparação no aparelho.
+
 ## Regra obrigatória: Clip 1 é a referência MESTRA de cor (v0.4.2-alpha)
 
 - **Toda calibração de cor dos Clipes 2, 3, 4…16 é feita diretamente a partir de dois quadros próximos do final do Clip 1.** As cores do Clip 1 não são modificadas.
