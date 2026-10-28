@@ -16,6 +16,7 @@ import java.nio.FloatBuffer;
  * CPU preview uses RegionMath. Both algorithms retain one stable calibration per clip.
  * Color gains operate on the same gamma-encoded RGB values in preview and export.
  * Never exponentiate RGB gains: that previously amplified color by gain^2.2 on export.
+ * Preview and export share soft color masks and shadow/highlight protection.
  */
 @UnstableApi
 public final class RegionEffect implements GlEffect {
@@ -29,6 +30,7 @@ public final class RegionEffect implements GlEffect {
         return new Program(plan,track);
     }
     private static final class Program extends BaseGlShaderProgram {
+        private static final float[] NEUTRAL={1f,1f,1f};
         private static final String VERT=
           "attribute vec2 aPos;varying vec2 uv;void main(){uv=(aPos+1.0)*0.5;gl_Position=vec4(aPos,0.0,1.0);}";
         private static final String FRAG=
@@ -47,8 +49,12 @@ public final class RegionEffect implements GlEffect {
           "vec2 mouth=vec2(centre.x,1.0-uFace.y-.75*uFace.w);"+
           "float lips=uHasFace*oval(uv,mouth,vec2(.23*uFace.z,.10*uFace.w))*isSkin;"+
           "float sky=isSky*(1.0-face);float skin=face*(1.0-lips);"+
-          "vec3 grade=r*uBase;grade*=mix(vec3(1.0),uSky,sky);"+
-          "grade*=mix(vec3(1.0),uSkin,skin);grade*=mix(vec3(1.0),uLips,lips);"+
+          "vec3 gain=uBase;gain*=mix(vec3(1.0),uSky,sky);"+
+          "gain*=mix(vec3(1.0),uSkin,skin);gain*=mix(vec3(1.0),uLips,lips);"+
+          "gain=clamp(gain,vec3(.84),vec3(1.18));"+
+          "float lum=dot(r,vec3(.299,.587,.114));"+
+          "float fade=.35+.65*smoothstep(.02,.12,lum)*(1.0-smoothstep(.84,.98,lum));"+
+          "vec3 grade=r*mix(vec3(1.0),gain,fade);"+
           "gl_FragColor=vec4(clamp(grade,0.0,1.0),c.a);}";
         private final RegionMath.Plan plan;private final FaceTimeline track;
         private int program,tex,pos,face,hasFace,base,sky,skin,lips;
@@ -79,8 +85,10 @@ public final class RegionEffect implements GlEffect {
         @Override public void drawFrame(int inputTexId,long presentationTimeUs){
             GLES20.glUseProgram(program);GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,inputTexId);GLES20.glUniform1i(tex,0);
-            uniform(base,plan.gains[0]);uniform(sky,plan.gains[1]);
-            uniform(skin,plan.gains[2]);uniform(lips,plan.gains[3]);
+            uniform(base,plan.gains[0]);
+            uniform(sky,plan.calibrated[RegionMath.SKY]?plan.gains[RegionMath.SKY]:NEUTRAL);
+            uniform(skin,plan.calibrated[RegionMath.SKIN]?plan.gains[RegionMath.SKIN]:NEUTRAL);
+            uniform(lips,plan.calibrated[RegionMath.LIPS]?plan.gains[RegionMath.LIPS]:NEUTRAL);
             RegionMath.FaceBox f=track==null?null:track.at(presentationTimeUs);
             GLES20.glUniform1f(hasFace,f==null?0:1);
             if(f!=null)GLES20.glUniform4f(face,f.x,f.y,f.w,f.h);
