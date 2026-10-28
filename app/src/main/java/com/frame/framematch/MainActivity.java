@@ -70,6 +70,8 @@ public class MainActivity extends Activity {
     private final ArrayList<Bitmap> earlyFrames=new ArrayList<>(), nearEndFrames=new ArrayList<>();
     private final ArrayList<RegionMath.FaceBox> endFaces=new ArrayList<>();
     private final ArrayList<AlignmentMath.Pose> startPoses=new ArrayList<>(), endPoses=new ArrayList<>();
+    private final ArrayList<Long> entryOffsetsMs=new ArrayList<>();
+    private android.widget.CheckBox smartEntrySwitch;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private LinearLayout clipList, container, previews;
@@ -110,6 +112,10 @@ public class MainActivity extends Activity {
         alignSwitch=new android.widget.CheckBox(this);
         alignSwitch.setText("Encaixe facial automático por olhos entre clipes consecutivos (experimental)");
         alignSwitch.setChecked(false);container.addView(alignSwitch);
+        smartEntrySwitch=new android.widget.CheckBox(this);
+        smartEntrySwitch.setText("Buscar melhor quadro de entrada (até 1,5s; pode cortar início da fala)");
+        smartEntrySwitch.setChecked(false);container.addView(smartEntrySwitch);
+        smartEntrySwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         container.addView(text("Força do encaixe facial (0–100%)",12,true));
         faceStrength=new SeekBar(this);faceStrength.setMax(100);faceStrength.setProgress(70);
         container.addView(faceStrength);
@@ -213,7 +219,7 @@ public class MainActivity extends Activity {
     private void invalidateAnalysis(){
         analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
         selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
-        nearEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();previews.removeAllViews();
+        nearEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();previews.removeAllViews();
     }
     private void refresh(){
         clipList.removeAllViews();
@@ -240,7 +246,7 @@ public class MainActivity extends Activity {
         analyzeButton.setEnabled(!busy && clips.size()>=2);
         exportButton.setEnabled(!busy && clips.size()>=2);
         intensity.setEnabled(!busy);regionSwitch.setEnabled(!busy);alignSwitch.setEnabled(!busy);
-        faceStrength.setEnabled(!busy);faceDuration.setEnabled(!busy);
+        faceStrength.setEnabled(!busy);faceDuration.setEnabled(!busy);smartEntrySwitch.setEnabled(!busy);
         cancelButton.setVisibility(busy&&transformer!=null?View.VISIBLE:View.GONE);
     }
 
@@ -504,16 +510,34 @@ public class MainActivity extends Activity {
                 ArrayList<Integer> modes=new ArrayList<>();
                 ArrayList<Integer> strengths=new ArrayList<>();
                 ArrayList<int[]> zones=new ArrayList<>();
+                ArrayList<Long> entries=new ArrayList<>();
                 for(int i=0;i<selected.size();i++){
                     Uri uri=selected.get(i);
                     Bitmap last=frame(uri,true);
                     Bitmap first=frame(uri,false);
+                    long selectedOffset=0;
+                    if(i>0&&smartEntrySwitch.isChecked()){
+                        long[] times={0,250,500,750,1000,1250,1500};
+                        AlignmentMath.Pose[] candidates=new AlignmentMath.Pose[times.length];
+                        candidates[0]=FaceTimeline.pose(detector,first);
+                        for(int q=1;q<times.length;q++){
+                            Bitmap candidate=frameOffset(uri,false,times[q]*1000L);
+                            candidates[q]=FaceTimeline.pose(detector,candidate);
+                            candidate.recycle();
+                        }
+                        EntranceMatch.Choice choice=EntranceMatch.choose(finalPose.get(i-1),candidates,times);
+                        if(EntranceMatch.safe(choice)){
+                            selectedOffset=choice.offsetMs;
+                            if(selectedOffset>0){first.recycle();first=frameOffset(uri,false,selectedOffset*1000L);}
+                        }
+                    }
+                    entries.add(selectedOffset);
                     RegionMath.FaceBox lastFace=FaceTimeline.detect(detector,last);
                     finalPose.add(FaceTimeline.pose(detector,last));
                     beginPose.add(FaceTimeline.pose(detector,first));
                     firsts.add(compact(first));
                     lasts.add(compact(last));
-                    earlys.add(compact(frameOffset(uri,false,500_000L)));
+                    earlys.add(compact(frameOffset(uri,false,(selectedOffset+500)*1000L)));
                     ends.add(compact(frameOffset(uri,true,500_000L)));
                     faces.add(lastFace);
                     nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector));
@@ -534,6 +558,7 @@ public class MainActivity extends Activity {
                     nearEndFrames.clear();nearEndFrames.addAll(ends);
                     endFaces.clear();endFaces.addAll(faces);
                     startPoses.clear();startPoses.addAll(beginPose);
+                    entryOffsetsMs.clear();entryOffsetsMs.addAll(entries);
                     endPoses.clear();endPoses.addAll(finalPose);
                     tracks.clear();tracks.addAll(nextTracks);
                     selectedModes.clear();selectedModes.addAll(modes);
@@ -606,6 +631,8 @@ public class MainActivity extends Activity {
                 comparison.addView(column,new LinearLayout.LayoutParams(0,-2,1f));
             }
             previews.addView(comparison);
+            previews.addView(text("Ponto de entrada: "+entryOffsetsMs.get(clipIndex)+" ms"+
+                (entryOffsetsMs.get(clipIndex)>0?" (corta o início do vídeo/áudio; confira a fala)":" (início preservado)"),11,true));
             previews.addView(text("Sobreposição 50/50 do último frame anterior + primeiro frame alinhado:",11,true));
             ImageView alignedOverlay=new ImageView(this);
             alignedOverlay.setImageBitmap(pictures[3]);alignedOverlay.setAdjustViewBounds(true);
@@ -700,7 +727,10 @@ public class MainActivity extends Activity {
             if(temporaryOutput.exists())throw new IllegalStateException("Arquivo temporário já existe");
             List<EditedMediaItem> edits=new ArrayList<>();
             for(int i=0;i<clips.size();i++){
-                EditedMediaItem.Builder item=new EditedMediaItem.Builder(MediaItem.fromUri(clips.get(i)));
+                MediaItem source=new MediaItem.Builder().setUri(clips.get(i))
+                    .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(i==0?0:entryOffsetsMs.get(i)).build()).build();
+                EditedMediaItem.Builder item=new EditedMediaItem.Builder(source);
                 ArrayList<androidx.media3.common.Effect> fx=new ArrayList<>();
                 if(i>0){
                     if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
