@@ -61,6 +61,8 @@ public class MainActivity extends Activity {
     private final ArrayList<RegionMath.Plan> plans=new ArrayList<>();
     private final ArrayList<FaceTimeline> tracks=new ArrayList<>();
     private final ArrayList<ContinuityZoom> zooms=new ArrayList<>();
+    // V39 uses a two-sided geometry plan: anticipation before the cut, retreat after it.
+    private final ArrayList<ContinuityZoom> preZooms=new ArrayList<>();
     // Cut i (between clips i-1 and i) has five alternatives, and one explicit selection.
     private final ArrayList<RegionMath.Plan[]> alternatives=new ArrayList<>();
     private final ArrayList<Integer> selectedModes=new ArrayList<>();
@@ -73,6 +75,7 @@ public class MainActivity extends Activity {
     private final ArrayList<RegionMath.FaceBox> endFaces=new ArrayList<>();
     private final ArrayList<AlignmentMath.Pose> startPoses=new ArrayList<>(), endPoses=new ArrayList<>();
     private final ArrayList<Long> entryOffsetsMs=new ArrayList<>();
+    private final ArrayList<Long> clipDurationsUs=new ArrayList<>();
     private android.widget.CheckBox smartEntrySwitch;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
@@ -223,9 +226,9 @@ public class MainActivity extends Activity {
     }
 
     private void invalidateAnalysis(){
-        analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
+        analyzed=false;plans.clear();tracks.clear();zooms.clear();preZooms.clear();alternatives.clear();
         selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
-        nearEndFrames.clear();oneSecondFrames.clear();oneSecondBeforeEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();previews.removeAllViews();
+        nearEndFrames.clear();oneSecondFrames.clear();oneSecondBeforeEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();clipDurationsUs.clear();previews.removeAllViews();
     }
     private void refresh(){
         clipList.removeAllViews();
@@ -345,6 +348,7 @@ public class MainActivity extends Activity {
         final ArrayList<RegionMath.Plan> selected=new ArrayList<>();
         final ArrayList<RegionMath.Plan[]> variants=new ArrayList<>();
         final ArrayList<ContinuityZoom> alignments=new ArrayList<>();
+        final ArrayList<ContinuityZoom> preAlignments=new ArrayList<>();
         final ArrayList<Bitmap[]> previewRows=new ArrayList<>();
         final ArrayList<Integer> chosenModes=new ArrayList<>();
     }
@@ -369,6 +373,7 @@ public class MainActivity extends Activity {
                                        ArrayList<AlignmentMath.Pose> firstLandmarks,
                                        ArrayList<AlignmentMath.Pose> lastLandmarks,
                                        ArrayList<FaceTimeline> faceTracks,
+                                       ArrayList<Long> durationsUs,
                                        ArrayList<Integer> modes,ArrayList<Integer> strengths,
                                        ArrayList<int[]> zones,float strength,
                                        boolean regional,boolean align) {
@@ -376,6 +381,7 @@ public class MainActivity extends Activity {
         output.selected.add(RegionMath.Plan.identity());
         output.variants.add(MatchChoices.candidates(RegionMath.Plan.identity()));
         output.alignments.add(null);
+        output.preAlignments.add(null);
         output.chosenModes.add(MatchChoices.ORIGINAL);
 
         final Bitmap masterLast=lasts.get(0);
@@ -431,19 +437,27 @@ public class MainActivity extends Activity {
             output.variants.add(choices);
             output.selected.add(choices[mode]);
 
-            ContinuityZoom zoom=align?ContinuityZoom.facePlan(
+            ContinuityZoom.CutPlan cut=align?ContinuityZoom.cutPlan(
                 lastLandmarks.get(i-1),firstLandmarks.get(i),
-                faceStrength.getProgress()/100f,500L+faceDuration.getProgress()):null;
+                faceStrength.getProgress()/100f,500L+faceDuration.getProgress(),
+                durationsUs.get(i-1)):null;
+            ContinuityZoom zoom=cut==null?null:cut.afterCut;
             output.alignments.add(zoom);
+            output.preAlignments.add(cut==null?null:cut.beforeCut);
 
             // The two references are intentionally different: master colors vs. local cut.
             Bitmap previousPreview=i==1?lasts.get(0)
                 :grade(lasts.get(i-1),output.selected.get(i-1),adjacentFace);
+            Bitmap cutPrevious=previousPreview;
+            ContinuityZoom beforeCut=output.preAlignments.get(i-1);
+            if(beforeCut!=null)
+                cutPrevious=beforeCut.previewAt(previousPreview,
+                    Math.max(0L,durationsUs.get(i-1)-1L));
             Bitmap[] previews=new Bitmap[4+MatchChoices.COUNT];
             previews[0]=small(masterLast);
-            previews[1]=small(previousPreview);
+            previews[1]=small(cutPrevious);
             previews[2]=small(target);
-            Bitmap aligned=zoom==null?target:zoom.preview(target);
+            Bitmap aligned=zoom==null?target:zoom.previewAt(target,0L);
             Bitmap overlap=overlay(previews[1],small(aligned));
             previews[3]=overlap;
             for(int m=0;m<MatchChoices.COUNT;m++){
@@ -453,6 +467,7 @@ public class MainActivity extends Activity {
                 if(p!=target && p!=previews[4+m] && !p.isRecycled())p.recycle();
             }
             output.previewRows.add(previews);
+            if(cutPrevious!=previousPreview&&!cutPrevious.isRecycled())cutPrevious.recycle();
             if(i>1 && !previousPreview.isRecycled())previousPreview.recycle();
         }
         return output;
@@ -463,6 +478,7 @@ public class MainActivity extends Activity {
         plans.clear();plans.addAll(result.selected);
         alternatives.clear();alternatives.addAll(result.variants);
         zooms.clear();zooms.addAll(result.alignments);
+        preZooms.clear();preZooms.addAll(result.preAlignments);
         analyzed=true;analyzedStrength=intensity.getProgress()/100f;
         busy=false;progress.setProgress(100);
         renderPreviews(result.previewRows);refresh();
@@ -507,7 +523,8 @@ public class MainActivity extends Activity {
         worker.submit(()->{
             try{
                 MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,
-                    oneSecondFrames,oneSecondBeforeEndFrames,endFaces,startPoses,endPoses,tracks,selections,strengths,zones,strength,regional,align);
+                    oneSecondFrames,oneSecondBeforeEndFrames,endFaces,startPoses,endPoses,tracks,clipDurationsUs,
+                    selections,strengths,zones,strength,regional,align);
                 main.post(()->{if(!ended)installResult(result);});
             }catch(Exception e){main.post(()->{
                 busy=false;analyzed=false;refresh();
@@ -536,8 +553,10 @@ public class MainActivity extends Activity {
                 ArrayList<Integer> strengths=new ArrayList<>();
                 ArrayList<int[]> zones=new ArrayList<>();
                 ArrayList<Long> entries=new ArrayList<>();
+                ArrayList<Long> durationsUs=new ArrayList<>();
                 for(int i=0;i<selected.size();i++){
                     Uri uri=selected.get(i);
+                    durationsUs.add(durationMs(uri)*1000L);
                     Bitmap last=frame(uri,true);
                     Bitmap first=frame(uri,false);
                     long selectedOffset=0;
@@ -577,7 +596,7 @@ public class MainActivity extends Activity {
                         say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
                 MatchResult result=computeChoices(firsts,lasts,earlys,ends,later,earlierEnds,faces,beginPose,finalPose,nextTracks,
-                    modes,strengths,zones,strength,regional,align);
+                    durationsUs,modes,strengths,zones,strength,regional,align);
                 main.post(()->{
                     if(ended)return;
                     firstFrames.clear();firstFrames.addAll(firsts);
@@ -591,6 +610,7 @@ public class MainActivity extends Activity {
                     entryOffsetsMs.clear();entryOffsetsMs.addAll(entries);
                     endPoses.clear();endPoses.addAll(finalPose);
                     tracks.clear();tracks.addAll(nextTracks);
+                    clipDurationsUs.clear();clipDurationsUs.addAll(durationsUs);
                     selectedModes.clear();selectedModes.addAll(modes);
                     cutIntensities.clear();cutIntensities.addAll(strengths);
                     perCutZones.clear();perCutZones.addAll(zones);
@@ -774,6 +794,7 @@ public class MainActivity extends Activity {
                         effects.add(new RegionEffect(plans.get(idx),tracks.get(idx)));
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
+                    if(k==0&&preZooms.get(idx)!=null)effects.add(preZooms.get(idx));
                     if(k==1&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
@@ -863,6 +884,7 @@ public class MainActivity extends Activity {
                     if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
                         fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
+                    if(preZooms.get(i)!=null)fx.add(preZooms.get(i));
                     if(zooms.get(i)!=null)fx.add(zooms.get(i));
                 }
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
