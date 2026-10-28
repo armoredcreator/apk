@@ -189,73 +189,150 @@ public class MainActivity extends Activity {
     }
     private void analyze(){if(clips.size()<2||busy)return;doAnalysis(false);}
     private void analyzeAndExport(){if(clips.size()<2||busy)return;doAnalysis(true);}
+    private static final class MatchResult {
+        final ArrayList<RegionMath.Plan> selected=new ArrayList<>();
+        final ArrayList<RegionMath.Plan[]> variants=new ArrayList<>();
+        final ArrayList<ContinuityZoom> alignments=new ArrayList<>();
+        final ArrayList<Bitmap[]> previewRows=new ArrayList<>();
+    }
+
+    private Bitmap compact(Bitmap bitmap) {
+        if(bitmap.getWidth()<=256)return bitmap;
+        int h=Math.max(2,Math.round(bitmap.getHeight()*256f/bitmap.getWidth()));
+        Bitmap copy=Bitmap.createScaledBitmap(bitmap,256,h,true);
+        bitmap.recycle();
+        return copy;
+    }
+
+    /** Recompute the chain from its beginning: a decision at cut 1 changes cut 2's reference. */
+    private MatchResult computeChoices(ArrayList<Bitmap> firsts,ArrayList<Bitmap> lasts,
+                                       ArrayList<Bitmap> earlys,ArrayList<Bitmap> ends,
+                                       ArrayList<RegionMath.FaceBox> lastFaces,
+                                       ArrayList<FaceTimeline> faceTracks,
+                                       ArrayList<Integer> modes,float strength,
+                                       boolean regional,boolean align) {
+        MatchResult output=new MatchResult();
+        output.selected.add(RegionMath.Plan.identity());
+        output.variants.add(MatchChoices.candidates(RegionMath.Plan.identity()));
+        output.alignments.add(null);
+        for(int i=1;i<firsts.size();i++){
+            RegionMath.FaceBox refFace=lastFaces.get(i-1);
+            RegionMath.Plan previous=output.selected.get(i-1);
+            Bitmap reference=grade(lasts.get(i-1),previous,refFace);
+            Bitmap nearReference=grade(ends.get(i-1),previous,refFace);
+            Bitmap target=firsts.get(i);
+            FaceTimeline timeline=faceTracks.get(i);
+            RegionMath.FaceBox firstFace=timeline==null?null:timeline.first();
+            RegionMath.Plan calibrated=RegionMath.Plan.identity();
+            if(regional){
+                calibrated=RegionMath.analyze(pixels(reference),reference.getWidth(),reference.getHeight(),refFace,
+                    pixels(target),target.getWidth(),target.getHeight(),firstFace,strength);
+                RegionMath.FaceBox earlyFace=timeline==null?null:timeline.at(500_000L);
+                RegionMath.Plan second=RegionMath.analyze(
+                    pixels(nearReference),nearReference.getWidth(),nearReference.getHeight(),refFace,
+                    pixels(earlys.get(i)),earlys.get(i).getWidth(),earlys.get(i).getHeight(),earlyFace,strength);
+                calibrated=RegionMath.blendStable(calibrated,second);
+            }
+            RegionMath.Plan[] alternatives=MatchChoices.candidates(calibrated);
+            int mode=modes.get(i);
+            if(!MatchChoices.valid(mode))throw new IllegalArgumentException("Tentativa de cor inválida");
+            output.variants.add(alternatives);
+            output.selected.add(alternatives[mode]);
+            ContinuityZoom zoom=align?ContinuityZoom.plan(timeline,refFace):null;
+            output.alignments.add(zoom);
+
+            Bitmap[] previews=new Bitmap[2+MatchChoices.COUNT];
+            previews[0]=small(reference);
+            previews[1]=small(target);
+            for(int m=0;m<MatchChoices.COUNT;m++){
+                Bitmap p=m==MatchChoices.ORIGINAL?target:grade(target,alternatives[m],firstFace);
+                if(zoom!=null)p=zoom.preview(p);
+                previews[2+m]=small(p);
+            }
+            output.previewRows.add(previews);
+            reference.recycle();
+            nearReference.recycle();
+        }
+        return output;
+    }
+
+    private void installResult(MatchResult result) {
+        plans.clear();plans.addAll(result.selected);
+        alternatives.clear();alternatives.addAll(result.variants);
+        zooms.clear();zooms.addAll(result.alignments);
+        analyzed=true;analyzedStrength=intensity.getProgress()/100f;
+        busy=false;progress.setProgress(100);
+        renderPreviews(result.previewRows);refresh();
+        say("Análise pronta: escolha uma das cinco tentativas para cada corte. O MP4 usa as opções marcadas.");
+    }
+
+    private void chooseColor(int clipIndex,int mode){
+        if(!analyzed||busy||clipIndex<1||clipIndex>=selectedModes.size()||!MatchChoices.valid(mode))return;
+        if(selectedModes.get(clipIndex)==mode)return;
+        selectedModes.set(clipIndex,mode);
+        final ArrayList<Integer> selections=new ArrayList<>(selectedModes);
+        final float strength=intensity.getProgress()/100f;
+        final boolean regional=regionSwitch.isChecked(),align=alignSwitch.isChecked();
+        busy=true;refresh();say("Aplicando tentativa "+MatchChoices.LABELS[mode]+
+            " ao corte "+clipIndex+" e atualizando as próximas referências...");
+        worker.submit(()->{
+            try{
+                MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,
+                    endFaces,tracks,selections,strength,regional,align);
+                main.post(()->{if(!ended)installResult(result);});
+            }catch(Exception e){main.post(()->{
+                busy=false;analyzed=false;refresh();
+                error("Não foi possível recalcular as tentativas: "+e.getMessage()+
+                    ". Analise os vídeos novamente.");
+            });}
+        });
+    }
+
     private void doAnalysis(boolean thenExport){
         busy=true;ended=false;refresh();progress.setProgress(0);
-        say("Analisando cenário, rosto e movimento — sem alterar originais...");
+        say("Preparando opções por corte; os arquivos originais não serão alterados...");
         final ArrayList<Uri> selected=new ArrayList<>(clips);
         final float strength=intensity.getProgress()/100f;
         final boolean regional=regionSwitch.isChecked(),align=alignSwitch.isChecked();
         worker.submit(()->{
             FaceDetector detector=FaceTimeline.createDetector();
             try{
-                ArrayList<RegionMath.Plan> nextPlans=new ArrayList<>();
+                ArrayList<Bitmap> firsts=new ArrayList<>(), lasts=new ArrayList<>();
+                ArrayList<Bitmap> earlys=new ArrayList<>(), ends=new ArrayList<>();
+                ArrayList<RegionMath.FaceBox> faces=new ArrayList<>();
                 ArrayList<FaceTimeline> nextTracks=new ArrayList<>();
-                ArrayList<ContinuityZoom> nextZooms=new ArrayList<>();
-                nextPlans.add(RegionMath.Plan.identity());
-                nextTracks.add(null);nextZooms.add(null);
-                ArrayList<Bitmap[]> triplets=new ArrayList<>();
-                Bitmap previousLast=frame(selected.get(0),true);
-                RegionMath.FaceBox lastFace=FaceTimeline.detect(detector,previousLast);
-                for(int i=1;i<selected.size();i++){
-                    Bitmap first=frame(selected.get(i),false);
-                    Bitmap last=previousLast;
-                    // A second close-by observation reduces influence of one anomalous boundary frame.
-                    // Do not use frames beyond 3 s for continuity calibration.
-                    Bitmap referenceNearEnd=frameOffset(selected.get(i-1),true,500_000L);
-                    if(i>1)referenceNearEnd=grade(referenceNearEnd,nextPlans.get(i-1),lastFace);
-                    Bitmap targetEarly=frameOffset(selected.get(i),false,500_000L);
-                    // Scan entire target at bounded sampling, keep a stable region plan for every frame.
-                    FaceTimeline timeline=FaceTimeline.scan(this,selected.get(i),Long.MAX_VALUE,detector);
-                    RegionMath.FaceBox targetFirst=timeline.first();
-                    RegionMath.Plan match=regional ? RegionMath.analyze(
-                        pixels(last),last.getWidth(),last.getHeight(),lastFace,
-                        pixels(first),first.getWidth(),first.getHeight(),targetFirst,strength)
-                        : RegionMath.Plan.identity();
-                    if(regional){
-                        RegionMath.FaceBox earlyFace=timeline.at(500_000L);
-                        RegionMath.Plan earlyMatch=RegionMath.analyze(
-                            pixels(referenceNearEnd),referenceNearEnd.getWidth(),referenceNearEnd.getHeight(),lastFace,
-                            pixels(targetEarly),targetEarly.getWidth(),targetEarly.getHeight(),earlyFace,strength);
-                        match=RegionMath.blendStable(match,earlyMatch);
-                    }
-                    nextPlans.add(match);nextTracks.add(timeline);
-                    ContinuityZoom zoom=align?ContinuityZoom.plan(timeline,lastFace):null;
-                    nextZooms.add(zoom);
-                    Bitmap corrected=grade(first,match,targetFirst);
-                    if(zoom!=null)corrected=zoom.preview(corrected);
-                    triplets.add(new Bitmap[]{small(last),small(first),small(corrected)});
-                    Bitmap finalFrame=frame(selected.get(i),true);
-                    RegionMath.FaceBox finalFace=FaceTimeline.detect(detector,finalFrame);
-                    previousLast=grade(finalFrame,match,finalFace);
-                    lastFace=finalFace;
-                    final int ix=i;
-                    main.post(()->{progress.setProgress(ix*100/(selected.size()-1));
-                        say("Analisado corte "+ix+" → "+(ix+1));});
+                ArrayList<Integer> modes=new ArrayList<>();
+                for(int i=0;i<selected.size();i++){
+                    Uri uri=selected.get(i);
+                    Bitmap last=frame(uri,true);
+                    RegionMath.FaceBox lastFace=FaceTimeline.detect(detector,last);
+                    firsts.add(compact(frame(uri,false)));
+                    lasts.add(compact(last));
+                    earlys.add(compact(frameOffset(uri,false,500_000L)));
+                    ends.add(compact(frameOffset(uri,true,500_000L)));
+                    faces.add(lastFace);
+                    nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector));
+                    modes.add(i==0?MatchChoices.ORIGINAL:MatchChoices.BALANCED);
+                    final int progressIndex=i+1;
+                    main.post(()->{progress.setProgress(progressIndex*50/selected.size());
+                        say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
+                MatchResult result=computeChoices(firsts,lasts,earlys,ends,faces,nextTracks,
+                    modes,strength,regional,align);
                 main.post(()->{
                     if(ended)return;
-                    plans.clear();plans.addAll(nextPlans);
+                    firstFrames.clear();firstFrames.addAll(firsts);
+                    lastFrames.clear();lastFrames.addAll(lasts);
+                    earlyFrames.clear();earlyFrames.addAll(earlys);
+                    nearEndFrames.clear();nearEndFrames.addAll(ends);
+                    endFaces.clear();endFaces.addAll(faces);
                     tracks.clear();tracks.addAll(nextTracks);
-                    zooms.clear();zooms.addAll(nextZooms);
-                    analyzed=true;analyzedStrength=strength;
-                    busy=false;progress.setProgress(100);renderPreviews(triplets);refresh();
-                    int aligned=0;for(ContinuityZoom z:zooms)if(z!=null)aligned++;
-                    say("Análise concluída. Cortes: "+(nextPlans.size()-1)+
-                        ", reenquadramentos confiáveis: "+aligned+". Veja a prévia e exporte.");
+                    selectedModes.clear();selectedModes.addAll(modes);
+                    installResult(result);
                     if(thenExport)startExport();
                 });
             }catch(Exception e){main.post(()->{busy=false;refresh();
-                error(e.getMessage()==null?"falha ao analisar quadros":e.getMessage());});
+                error("Não foi possível analisar as cenas: "+e.getMessage());});
             }finally{detector.close();}
         });
     }
