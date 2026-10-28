@@ -14,6 +14,8 @@ import java.nio.FloatBuffer;
 
 /** Per-pixel chroma/skin/lips masking in GLES2, applied throughout the exported video.
  * CPU preview uses RegionMath. Both algorithms retain one stable calibration per clip.
+ * Color gains operate on the same gamma-encoded RGB values in preview and export.
+ * Never exponentiate RGB gains: that previously amplified color by gain^2.2 on export.
  */
 @UnstableApi
 public final class RegionEffect implements GlEffect {
@@ -34,7 +36,7 @@ public final class RegionEffect implements GlEffect {
           "uniform vec3 uBase,uSky,uSkin,uLips;uniform vec4 uFace;uniform float uHasFace;"+
           "float oval(vec2 p,vec2 c,vec2 rad){vec2 d=(p-c)/max(rad,vec2(0.001));"+
           "return 1.0-smoothstep(0.75,1.18,dot(d,d));}"+
-          "void main(){vec4 c=texture2D(uTex,uv);vec3 r=pow(max(c.rgb,vec3(0.0)),vec3(1.0/2.2));"+
+          "void main(){vec4 c=texture2D(uTex,uv);vec3 r=clamp(c.rgb,0.0,1.0);"+
           "float cr=0.5+0.713*(r.r-dot(r,vec3(.299,.587,.114)));"+
           "float cb=0.5+0.564*(r.b-dot(r,vec3(.299,.587,.114)));"+
           "float isSkin=smoothstep(.51,.54,cr)*(1.0-smoothstep(.69,.72,cr))*"+
@@ -47,7 +49,7 @@ public final class RegionEffect implements GlEffect {
           "float sky=isSky*(1.0-face);float skin=face*(1.0-lips);"+
           "vec3 grade=r*uBase;grade*=mix(vec3(1.0),uSky,sky);"+
           "grade*=mix(vec3(1.0),uSkin,skin);grade*=mix(vec3(1.0),uLips,lips);"+
-          "gl_FragColor=vec4(pow(clamp(grade,0.0,1.0),vec3(2.2)),c.a);}";
+          "gl_FragColor=vec4(clamp(grade,0.0,1.0),c.a);}";
         private final RegionMath.Plan plan;private final FaceTimeline track;
         private int program,tex,pos,face,hasFace,base,sky,skin,lips;
         private final FloatBuffer quad=ByteBuffer.allocateDirect(8*4).order(ByteOrder.nativeOrder())
