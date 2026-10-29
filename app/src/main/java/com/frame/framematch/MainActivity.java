@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
     private TextView status, subtitle;
     private SeekBar intensity;
     private ProgressBar progress;
-    private Button addButton, analyzeButton, exportButton, cancelButton;
+    private Button addButton, analyzeButton, exportButton, cancelButton, approvedReferenceButton;
     private android.widget.CheckBox alignSwitch, regionSwitch, cinematicZoomSwitch, autoCinemaSwitch;
     private final ArrayList<AdaptiveCutPlanner.Decision> cinematicDecisions=new ArrayList<>();
     private SeekBar faceDuration,faceStrength;
@@ -108,6 +108,9 @@ public class MainActivity extends Activity {
         subtitle=text("CLIP 1 = referência de COR fixa | cortes adjacentes = movimento e enquadramento",13,false);
         container.addView(subtitle);
         addButton=button("+ ADICIONAR VÍDEOS",v->pick()); container.addView(addButton);
+        approvedReferenceButton=button("USAR REFERÊNCIA APROVADA 94→95 (ZOOM 33%)",v->applyApprovedReference());
+        container.addView(approvedReferenceButton);
+        container.addView(text("Referência 94→95: cenas completas, aproximação nos 3s finais, 33% no corte e recuo lento. Cor Equilibrada inicial; valide a prévia antes de exportar. Para outras cenas, use AUTO CINEMA.",12,false));
         clipList=new LinearLayout(this); clipList.setOrientation(LinearLayout.VERTICAL);container.addView(clipList);
         container.addView(text("Intensidade da correção (0–100%)",13,true));
         intensity=new SeekBar(this);intensity.setMax(100);intensity.setProgress(65);container.addView(intensity);
@@ -152,12 +155,12 @@ public class MainActivity extends Activity {
         matchFpsSwitch.setChecked(false);container.addView(matchFpsSwitch);
         enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
         container.addView(enableAllButton);
-        container.addView(text("Diagnóstico automático por união. Zoom manual de 33% é apenas referência experimental de 2 clipes; NÃO comprova V39.",12,false));
+        container.addView(text("Modo AUTO analisa cada união; a referência manual de 33% só deve ser usada após conferir a prévia. Não declara equivalência automática à V37/V39.",12,false));
         autoCinemaSwitch=new android.widget.CheckBox(this);
         autoCinemaSwitch.setText("AUTO CINEMA (experimental): diagnosticar cada união; rejeitar zoom inseguro");
         autoCinemaSwitch.setChecked(true);container.addView(autoCinemaSwitch);
         cinematicZoomSwitch=new android.widget.CheckBox(this);
-        cinematicZoomSwitch.setText("ZOOM MANUAL 33% (referência V39; apenas 2 clipes)");
+        cinematicZoomSwitch.setText("ZOOM MANUAL 33% (referência 94→95; somente 2 clipes)");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
         container.addView(text("Com zoom: alinhar o rosto no quadro exato da união e retornar suavemente à geometria original. Ajustes inseguros são recusados.",12,false));
         autoCinemaSwitch.setOnCheckedChangeListener((b,checked)->{
@@ -260,6 +263,7 @@ public class MainActivity extends Activity {
         }
         addButton.setEnabled(!busy && clips.size()<MAX_CLIPS);
         enableAllButton.setEnabled(!busy);
+        approvedReferenceButton.setEnabled(!busy && clips.size()==2);
         batchModeButton.setEnabled(!busy && analyzed && clips.size()>=3);
         naturalButton.setEnabled(!busy && analyzed);
         matchSizeSwitch.setEnabled(!busy);
@@ -326,6 +330,25 @@ public class MainActivity extends Activity {
             masterInfo.setText("Metadados do Clip 1 indisponíveis: use a resolução de segurança 540×960.");
         }
     }
+    /** Explicit reproducible setup for the validated 94→95 camera geometry.
+     *  The color grade is an Android approximation, not pixel parity with desktop V37.
+     *  Never apply this 33% profile blindly to an unknown clip pair.
+     */
+    private void applyApprovedReference(){
+        if(busy||clips.size()!=2){
+            error("Adicione exatamente duas cenas para usar esta referência.");return;
+        }
+        smartEntrySwitch.setChecked(false); // Never lose the first 250ms or phone audio.
+        autoCinemaSwitch.setChecked(false);
+        cinematicZoomSwitch.setChecked(true);
+        alignSwitch.setChecked(false); // Avoid a second independent facial zoom.
+        regionSwitch.setChecked(true);
+        matchSizeSwitch.setChecked(true);
+        invalidateAnalysis();
+        refresh();
+        say("Base 94→95 selecionada. Nenhum início será cortado. Gere as tentativas e confira a prévia completa.");
+    }
+
     private void enableEverything(){
         if(busy)return;
         // Apply independent techniques simultaneously; color LOOKs remain exclusive.
@@ -336,8 +359,11 @@ public class MainActivity extends Activity {
         matchBitrateSwitch.setChecked(true);
         matchFpsSwitch.setChecked(true);
         autoCinemaSwitch.setChecked(true);
+        if(!cinematicZoomSwitch.isChecked())autoCinemaSwitch.setChecked(true);
         if(!changed)invalidateAnalysis();
-        say("AUTO CINEMA: diagnostica cada corte e evita aplicar zoom sem evidência.");
+        say(cinematicZoomSwitch.isChecked()
+            ?"Referência manual preservada: 33% com recuo completo. Reanalise antes de exportar."
+            :"AUTO CINEMA: diagnostica cada corte e evita aplicar zoom sem evidência.");
         refresh();
     }
     private void autoNaturalAll(){
@@ -571,7 +597,7 @@ public class MainActivity extends Activity {
                     Bitmap last=frame(uri,true);
                     Bitmap first=frame(uri,false);
                     long selectedOffset=0;
-                    if(i>0&&smartEntrySwitch.isChecked()){
+                    if(i>0&&smartEntrySwitch.isChecked()&&!cinematicZoomSwitch.isChecked()){
                         long[] times={0,250,500,750,1000,1250,1500};
                         AlignmentMath.Pose[] candidates=new AlignmentMath.Pose[times.length];
                         candidates[0]=FaceTimeline.pose(detector,first);
@@ -599,7 +625,8 @@ public class MainActivity extends Activity {
                     faces.add(lastFace);
                     nextTracks.add(i==0?null:FaceTimeline.scan(this,uri,Long.MAX_VALUE,detector)
                         .shifted(selectedOffset*1000L));
-                    modes.add(i==0?MatchChoices.ORIGINAL:-1);
+                    modes.add(i==0?MatchChoices.ORIGINAL:
+                        (cinematicZoomSwitch.isChecked()?MatchChoices.BALANCED:-1));
                     strengths.add(100);
                     zones.add(new int[]{100,100,100,100});
                     final int progressIndex=i+1;
@@ -763,7 +790,7 @@ public class MainActivity extends Activity {
                     });
                 }
             }
-            previews.addView(button("▶ PRÉVIA DESTA TRANSIÇÃO (V39 mostra o recuo completo)",
+            previews.addView(button("▶ PRÉVIA REAL DESTA TRANSIÇÃO (inclui o recuo)",
                 v->renderCutPreview(clipIndex)));
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
                 " · Referência de cor fixa no Clip 1. Outros cortes não mudam.",11,false));
