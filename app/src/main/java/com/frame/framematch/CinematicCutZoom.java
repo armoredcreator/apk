@@ -19,21 +19,25 @@ public final class CinematicCutZoom implements MatrixTransformation {
     private final CinematicTimebase timebase;
     private final long durationUs;
     private final float peak;
+    private final CinematicCameraPivot pivot;
 
     private CinematicCutZoom(boolean approaching, long startMs, long durationMs,
-                             float zoomPercent) {
+                             float zoomPercent, CinematicCameraPivot pivot) {
         this.approaching = approaching;
         this.timebase = new CinematicTimebase(startMs);
         this.durationUs = Math.max(1L, durationMs) * 1000L;
         this.peak = 1f + Math.max(0f, Math.min(0.5f, zoomPercent / 100f));
+        this.pivot = pivot == null ? CinematicCameraPivot.validatedPortrait() : pivot;
     }
 
-    public static CinematicCutZoom before(long startMs, long durationMs, float zoomPercent) {
-        return new CinematicCutZoom(true, startMs, durationMs, zoomPercent);
+    public static CinematicCutZoom before(long startMs, long durationMs, float zoomPercent,
+                                          CinematicCameraPivot pivot) {
+        return new CinematicCutZoom(true, startMs, durationMs, zoomPercent, pivot);
     }
 
-    public static CinematicCutZoom after(long startMs, long durationMs, float zoomPercent) {
-        return new CinematicCutZoom(false, startMs, durationMs, zoomPercent);
+    public static CinematicCutZoom after(long startMs, long durationMs, float zoomPercent,
+                                         CinematicCameraPivot pivot) {
+        return new CinematicCutZoom(false, startMs, durationMs, zoomPercent, pivot);
     }
 
     public float scaleAt(long presentationTimeUs) {
@@ -47,8 +51,15 @@ public final class CinematicCutZoom implements MatrixTransformation {
 
     @Override public Matrix getMatrix(long presentationTimeUs) {
         float scale = scaleAt(presentationTimeUs);
+        // Media3 uses normalized device coordinates. A plain setScale()
+        // pivots around the screen centre (y=432 on 480x864) and was the
+        // cause of the Android framing regression versus V37 (y=320).
         Matrix matrix = new Matrix();
-        matrix.setScale(scale, scale);
+        matrix.setValues(new float[] {
+            scale, 0f, pivot.dx(scale),
+            0f, scale, pivot.dy(scale),
+            0f, 0f, 1f
+        });
         return matrix;
     }
 }
