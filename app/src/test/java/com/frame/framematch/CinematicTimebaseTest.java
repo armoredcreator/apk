@@ -27,7 +27,8 @@ public class CinematicTimebaseTest {
         float last = ZoomTimeline.recede(timebase.sourceTimeUs(8 * SECOND),
                 DURATION, PEAK);
         assertEquals(PEAK, first, .0001f);
-        assertEquals(1.165f, middle, .001f);
+        // At 4s V37_RECEDE[4] = 0.545, hence scale = 1 + 0.33 * 0.545.
+        assertEquals(1.17985f, middle, .001f);
         assertEquals(1f, last, .0001f);
     }
 
