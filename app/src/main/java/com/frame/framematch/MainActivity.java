@@ -358,7 +358,7 @@ public class MainActivity extends Activity {
         matchSizeSwitch.setChecked(true);
         matchBitrateSwitch.setChecked(true);
         matchFpsSwitch.setChecked(true);
-        autoCinemaSwitch.setChecked(true);
+        // An explicit validated profile is never silently replaced by auto cinema.
         if(!cinematicZoomSwitch.isChecked())autoCinemaSwitch.setChecked(true);
         if(!changed)invalidateAnalysis();
         say(cinematicZoomSwitch.isChecked()
