@@ -871,16 +871,13 @@ public class MainActivity extends Activity {
                         if(overlap!=null)effects.add(overlap);
                     }
                 }
-                // Preview and full export share the exact plan for this cut.
-                if(k==0){
-                    float incoming=cinematicPercentAtCut(idx);
-                    if(incoming>0f)
-                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),incoming,cinematicPivotAtCut(idx)));
-                    if(localZoom>0f)
-                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip)));
-                }else if(localZoom>0f){
-                    effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip)));
-                }
+                // V37: exactly one camera trajectory per clip, both incoming and outgoing.
+                // Preview uses the SAME full-duration timeline and both pivots as export.
+                float arriving=cinematicPercentAtCut(idx);
+                float leaving=cinematicPercentAtCut(idx+1);
+                if(arriving>0f||leaving>0f)
+                    effects.add(new CinematicDualCutZoom(starts[k],durationMs(clips.get(idx)),
+                        arriving,leaving,cinematicPivotAtCut(idx),cinematicPivotAtCut(idx+1)));
                 int[] size=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
                 effects.add(Presentation.createForWidthAndHeight(size[0],size[1],
@@ -977,15 +974,14 @@ public class MainActivity extends Activity {
                         if(overlap!=null)fx.add(overlap);
                     }
                 }
-                // Independent entering recede and outgoing approach; never a scale reset.
+                // The same V37-tested single camera trajectory is used in preview and export.
                 float incoming=cinematicPercentAtCut(i);
                 float outgoing=cinematicPercentAtCut(i+1);
                 long sourceStart=i==0?0:entryOffsetsMs.get(i);
                 long sourceDuration=durationMs(clips.get(i));
-                if(incoming>0f)
-                    fx.add(CinematicCutZoom.after(sourceStart,sourceDuration,incoming,cinematicPivotAtCut(i)));
-                if(outgoing>0f)
-                    fx.add(CinematicCutZoom.before(sourceStart,sourceDuration,outgoing,cinematicPivotAtCut(i+1)));
+                if(incoming>0f||outgoing>0f)
+                    fx.add(new CinematicDualCutZoom(sourceStart,sourceDuration,
+                        incoming,outgoing,cinematicPivotAtCut(i),cinematicPivotAtCut(i+1)));
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
                 int[] outputSize=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
