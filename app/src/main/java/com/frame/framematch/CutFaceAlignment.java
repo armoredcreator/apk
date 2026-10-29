@@ -10,10 +10,12 @@ public final class CutFaceAlignment implements MatrixTransformation {
     private final CutFaceMath.Plan plan;
     private final CinematicTimebase timebase;
     private final long durationUs;
+    private final long sourceStartUs;
 
     private CutFaceAlignment(CutFaceMath.Plan p,long startMs,long durationMs) {
         plan=p;
         timebase=new CinematicTimebase(startMs);
+        sourceStartUs=Math.max(0L,startMs)*1000L;
         durationUs=Math.max(1L,durationMs)*1000L;
     }
     public static CutFaceAlignment between(RegionMath.FaceBox referenceEnd,
@@ -26,10 +28,9 @@ public final class CutFaceAlignment implements MatrixTransformation {
         return p.active()?new CutFaceAlignment(p,clipStartMs,fullDurationMs):null;
     }
     @Override public Matrix getMatrix(long presentationTimeUs) {
-        float[] a=plan.at(timebase.sourceTimeUs(presentationTimeUs)-Math.max(0L,
-            // Correct for clip source offset; preview/full share timeline.
-            // Source timebase at first retained frame already includes this offset.
-            0L),durationUs);
+        // Use elapsed time since first retained frame, not composition time.
+        float[] a=plan.at(Math.max(0L,timebase.sourceTimeUs(presentationTimeUs)-sourceStartUs),
+            durationUs);
         Matrix matrix=new Matrix();
         matrix.setValues(new float[]{a[0],0f,a[2],0f,a[1],a[3],0f,0f,1f});
         return matrix;
