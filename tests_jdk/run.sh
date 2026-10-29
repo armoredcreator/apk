@@ -12,6 +12,7 @@ javac -d "$OUT" "$ROOT/app/src/main/java/com/frame/framematch/RegionMath.java" \
   "$ROOT/app/src/main/java/com/frame/framematch/TemporalColor.java" \
   "$ROOT/app/src/main/java/com/frame/framematch/ZoomTimeline.java" \
   "$ROOT/app/src/main/java/com/frame/framematch/CinematicCameraPivot.java" \
+  "$ROOT/app/src/main/java/com/frame/framematch/CutFaceMath.java" \
   "$ROOT/app/src/main/java/com/frame/framematch/AdaptiveCutPlanner.java" \
   "$ROOT/tests_jdk/RegionMathSelfTest.java" "$ROOT/tests_jdk/MatchChoicesSelfTest.java" \
   "$ROOT/tests_jdk/MasterColorMatchSelfTest.java" \
@@ -21,6 +22,7 @@ javac -d "$OUT" "$ROOT/app/src/main/java/com/frame/framematch/RegionMath.java" \
   "$ROOT/tests_jdk/EntranceMatchSelfTest.java" \
   "$ROOT/tests_jdk/TemporalColorSelfTest.java" \
   "$ROOT/tests_jdk/ZoomTimelineSelfTest.java" "$ROOT/tests_jdk/CinematicCameraPivotSelfTest.java" \
+  "$ROOT/tests_jdk/CutFaceMathSelfTest.java" \
   "$ROOT/tests_jdk/AdaptiveCutPlannerSelfTest.java"
 java -cp "$OUT" RegionMathSelfTest
 java -cp "$OUT" MatchChoicesSelfTest
@@ -32,4 +34,5 @@ java -cp "$OUT" EntranceMatchSelfTest
 java -cp "$OUT" TemporalColorSelfTest
 java -cp "$OUT" ZoomTimelineSelfTest
 java -cp "$OUT" CinematicCameraPivotSelfTest
+java -cp "$OUT" CutFaceMathSelfTest
 java -cp "$OUT" AdaptiveCutPlannerSelfTest
