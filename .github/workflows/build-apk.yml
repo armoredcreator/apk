@@ -58,7 +58,7 @@ jobs:
             echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
             exit 0
           fi
-          TAG="v0.9.4-alpha"
+          TAG="v0.9.5-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -66,12 +66,12 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.9.4 - Correção de enquadramento e recuo V37" \
-              --notes "APK experimental: zoom no eixo do rosto em ambos os lados do corte, aproximação iniciada 3s antes e recuo contínuo calibrado com medições V37. Não anuncia paridade V39 sem comparar vídeo exportado no Android." \
+              --title "FrameMatch Android 0.9.5 - Modo de referência 94-95 e clipes completos" \
+              --notes "APK de teste: botão referência 94-95, zoom manual 33%, aproximação 3s antes, recuo V37, cortes de entrada desativados na referência, seleção inicial Equilibrada. Não promete igualdade pixel a pixel com V37/V39." \
               --prerelease
           fi
           # Only report success after Gradle, tests, APK artifact and release succeeded.
           gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
-            -f state=success -f context="framematch/apk-0.9.4" \
+            -f state=success -f context="framematch/apk-0.9.5" \
             -f description="Android build, tests and test APK published" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
