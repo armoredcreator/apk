@@ -11,11 +11,19 @@ public final class AdaptiveCutPlannerSelfTest {
     public static void main(String[] args){
         int w=96,h=172;
         int[] base=solid(w,h,0x484848);
-        int[] different=solid(w,h,0x747474);
+        int[] brighter=solid(w,h,0x747474);
+        int[] different=solid(w,h,0x282828);
+        for(int y=0;y<h;y++)for(int x=w/2;x<w;x++)different[y*w+x]=0xff989898;
         RegionMath.FaceBox face=new RegionMath.FaceBox(.25f,.15f,.48f,.45f);
         AdaptiveCutPlanner.Decision clean=AdaptiveCutPlanner.decide(
             base,w,h,base,w,h,face,face,8000,8000);
         check(clean.action==AdaptiveCutPlanner.Action.KEEP,"Already matching must remain untouched");
+        AdaptiveCutPlanner.Decision exposure=AdaptiveCutPlanner.decide(
+            base,w,h,brighter,w,h,face,face,8000,8000);
+        check(exposure.action==AdaptiveCutPlanner.Action.KEEP,
+              "Uniform exposure/color difference must NOT trigger zoom");
+        check(AdaptiveCutPlanner.structuralDifference(base,w,h,brighter,w,h)<.001f,
+              "Uniform exposure must not be treated as structural mismatch");
         AdaptiveCutPlanner.Decision manual=AdaptiveCutPlanner.decide(
             base,w,h,different,w,h,face,face,8000,8000);
         check(manual.action==AdaptiveCutPlanner.Action.ZOOM,"Detect visible mismatch");
