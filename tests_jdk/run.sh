@@ -23,7 +23,9 @@ javac -d "$OUT" "$ROOT/app/src/main/java/com/frame/framematch/RegionMath.java" \
   "$ROOT/tests_jdk/TemporalColorSelfTest.java" \
   "$ROOT/tests_jdk/ZoomTimelineSelfTest.java" "$ROOT/tests_jdk/CinematicCameraPivotSelfTest.java" \
   "$ROOT/tests_jdk/CutFaceMathSelfTest.java" \
-  "$ROOT/tests_jdk/AdaptiveCutPlannerSelfTest.java"
+  "$ROOT/tests_jdk/AdaptiveCutPlannerSelfTest.java" \
+  "$ROOT/app/src/main/java/com/frame/framematch/CinemaCurve.java" \
+  "$ROOT/tests_jdk/CinemaCurveSelfTest.java"
 java -cp "$OUT" RegionMathSelfTest
 java -cp "$OUT" MatchChoicesSelfTest
 java -cp "$OUT" MasterColorMatchSelfTest
@@ -36,3 +38,4 @@ java -cp "$OUT" ZoomTimelineSelfTest
 java -cp "$OUT" CinematicCameraPivotSelfTest
 java -cp "$OUT" CutFaceMathSelfTest
 java -cp "$OUT" AdaptiveCutPlannerSelfTest
+java -cp "$OUT" CinemaCurveSelfTest
