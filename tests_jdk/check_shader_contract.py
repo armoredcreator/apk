@@ -83,8 +83,8 @@ assert 'previewPlayer.setOnPreparedListener' in main
 assert 'if(k==1&&localZoom<=0f&&zooms.get(idx)!=null)' in main
 assert 'cinematicPercentAtCut(nextClip)' in main, "preview must use per-cut decisions"
 assert 'cinematicPercentAtCut(i+1)' in main, "export must anticipate the outgoing cut"
-assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom)' in main
-assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom)' in main
+assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip))' in main
+assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip))' in main
 assert 'cinematicDecisions.add(AdaptiveCutPlanner.decide(' in main
 assert 'autoCinemaSwitch.setChecked(true)' in main
 camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read_text(encoding='utf-8')
