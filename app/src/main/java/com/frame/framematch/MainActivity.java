@@ -159,6 +159,7 @@ public class MainActivity extends Activity {
         cinematicZoomSwitch=new android.widget.CheckBox(this);
         cinematicZoomSwitch.setText("ZOOM MANUAL 33% (referência V39; apenas 2 clipes)");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
+        container.addView(text("Com zoom: alinhar o rosto no quadro exato da união e retornar suavemente à geometria original. Ajustes inseguros são recusados.",12,false));
         autoCinemaSwitch.setOnCheckedChangeListener((b,checked)->{
             if(checked&&cinematicZoomSwitch.isChecked())cinematicZoomSwitch.setChecked(false);
             invalidateAnalysis();
@@ -832,6 +833,13 @@ public class MainActivity extends Activity {
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
                     if(k==1&&localZoom<=0f&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
+                    if(k==1&&localZoom>0f){
+                        RegionMath.FaceBox previous=endFaces.get(nextClip-1);
+                        RegionMath.FaceBox incoming=tracks.get(idx)==null?null:tracks.get(idx).first();
+                        CutFaceAlignment overlap=CutFaceAlignment.between(previous,incoming,
+                            starts[k],durationMs(clips.get(idx)));
+                        if(overlap!=null)effects.add(overlap);
+                    }
                 }
                 // Preview and full export share the exact plan for this cut.
                 if(k==0){
@@ -931,6 +939,13 @@ public class MainActivity extends Activity {
                         fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
                     if(cinematicPercentAtCut(i)<=0f&&zooms.get(i)!=null)fx.add(zooms.get(i));
+                    if(cinematicPercentAtCut(i)>0f){
+                        RegionMath.FaceBox previous=endFaces.get(i-1);
+                        RegionMath.FaceBox incoming=tracks.get(i)==null?null:tracks.get(i).first();
+                        CutFaceAlignment overlap=CutFaceAlignment.between(previous,incoming,
+                            entryOffsetsMs.get(i),durationMs(clips.get(i)));
+                        if(overlap!=null)fx.add(overlap);
+                    }
                 }
                 // Independent entering recede and outgoing approach; never a scale reset.
                 float incoming=cinematicPercentAtCut(i);
