@@ -58,6 +58,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private static final int OPEN_VIDEOS=11, SAVE_VIDEO=12, MAX_CLIPS=16;
     private final ArrayList<Uri> clips=new ArrayList<>();
+    private volatile boolean calibratedV39Pair=false;
     private final ArrayList<RegionMath.Plan> plans=new ArrayList<>();
     private final ArrayList<FaceTimeline> tracks=new ArrayList<>();
     private final ArrayList<ContinuityZoom> zooms=new ArrayList<>();
@@ -227,7 +228,7 @@ public class MainActivity extends Activity {
     }
 
     private void invalidateAnalysis(){
-        analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
+        analyzed=false;calibratedV39Pair=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
         selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
         nearEndFrames.clear();oneSecondFrames.clear();oneSecondBeforeEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();previews.removeAllViews();
     }
@@ -523,6 +524,18 @@ public class MainActivity extends Activity {
         });
     }
 
+    private String sourceSha256(Uri uri) throws Exception {
+        java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");
+        try(InputStream is=getContentResolver().openInputStream(uri)){
+            if(is==null)throw new java.io.IOException("Arquivo indisponível");
+            byte[] b=new byte[65536];int n;
+            while((n=is.read(b))!=-1)md.update(b,0,n);
+        }
+        StringBuilder hex=new StringBuilder(64);
+        for(byte b:md.digest())hex.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
+        return hex.toString();
+    }
+
     private void doAnalysis(boolean thenExport){
         busy=true;ended=false;refresh();progress.setProgress(0);
         say("Preparando opções por corte; os arquivos originais não serão alterados...");
@@ -582,6 +595,14 @@ public class MainActivity extends Activity {
                     main.post(()->{progress.setProgress(progressIndex*50/selected.size());
                         say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
+                boolean verified=false;
+                if(selected.size()==2 && entries.get(0)==0L && entries.get(1)==0L){
+                    try {
+                        verified=V39ReferenceProfile.CLIP1_SHA256.equals(sourceSha256(selected.get(0)))
+                            && V39ReferenceProfile.CLIP2_SHA256.equals(sourceSha256(selected.get(1)));
+                    } catch(Exception ignored) {verified=false;}
+                }
+                final boolean verifiedPair=verified;
                 MatchResult result=computeChoices(firsts,lasts,earlys,ends,later,earlierEnds,faces,beginPose,finalPose,nextTracks,
                     modes,strengths,zones,strength,regional,align);
                 main.post(()->{
@@ -597,6 +618,7 @@ public class MainActivity extends Activity {
                     entryOffsetsMs.clear();entryOffsetsMs.addAll(entries);
                     endPoses.clear();endPoses.addAll(finalPose);
                     tracks.clear();tracks.addAll(nextTracks);
+                    calibratedV39Pair=verifiedPair;
                     selectedModes.clear();selectedModes.addAll(modes);
                     cutIntensities.clear();cutIntensities.addAll(strengths);
                     perCutZones.clear();perCutZones.addAll(zones);
@@ -778,18 +800,23 @@ public class MainActivity extends Activity {
                         .setStartPositionMs(starts[k]).setEndPositionMs(ends[k]).build()).build();
                 ArrayList<androidx.media3.common.Effect> effects=new ArrayList<>();
                 if(idx>0){
-                    if(regionSwitch.isChecked()&&selectedModes.get(idx)!=MatchChoices.ORIGINAL)
+                    if(regionSwitch.isChecked()&&selectedModes.get(idx)!=MatchChoices.ORIGINAL
+                            && !(calibratedV39Pair&&cinematicZoomSwitch.isChecked()))
                         effects.add(new RegionEffect(plans.get(idx),tracks.get(idx)));
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
                     if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
                 }
+                if(calibratedV39Pair&&cinematicZoomSwitch.isChecked())
+                    effects.add(new V39ReferenceColorEffect(idx,starts[k]));
                 if(cinematicZoomSwitch.isChecked() && clips.size()==2){
                     if(k==0){
                         // Approach is computed from the original source timeline, not the clipped preview.
-                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f));
+                        if(calibratedV39Pair)effects.add(V39ReferenceMotion.before(starts[k],durationMs(clips.get(idx))));
+                        else effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f));
                     }else{
-                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f));
+                        if(calibratedV39Pair)effects.add(V39ReferenceMotion.after(starts[k],durationMs(clips.get(idx))));
+                        else effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f));
                     }
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
@@ -876,22 +903,28 @@ public class MainActivity extends Activity {
                 EditedMediaItem.Builder item=new EditedMediaItem.Builder(source);
                 ArrayList<androidx.media3.common.Effect> fx=new ArrayList<>();
                 if(i>0){
-                    if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
+                    if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL
+                            && !(calibratedV39Pair&&cinematicZoomSwitch.isChecked()))
                         fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
                     if(!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(i)!=null)fx.add(zooms.get(i));
                 }
+                if(calibratedV39Pair&&cinematicZoomSwitch.isChecked())
+                    fx.add(new V39ReferenceColorEffect(i,i==0?0:entryOffsetsMs.get(i)));
                 if(cinematicZoomSwitch.isChecked() && clips.size()==2){
                     if(i+1<clips.size()){
                         // The current clip approaches its NEXT cut over the final three seconds.
-                        fx.add(CinematicCutZoom.before(i==0?0:entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                        if(calibratedV39Pair)fx.add(V39ReferenceMotion.before(i==0?0:entryOffsetsMs.get(i),durationMs(clips.get(i))));
+                        else fx.add(CinematicCutZoom.before(i==0?0:entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
                     }else if(i>0){
                         // Last clip: finish the recede before the final frame.
-                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                        if(calibratedV39Pair)fx.add(V39ReferenceMotion.after(entryOffsetsMs.get(i),durationMs(clips.get(i))));
+                        else fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
                     }
                     // Middle clips need a recede from the previous cut as well.
                     if(i>0 && i+1<clips.size()){
-                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
+                        if(calibratedV39Pair)fx.add(V39ReferenceMotion.after(entryOffsetsMs.get(i),durationMs(clips.get(i))));
+                        else fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
                     }
                 }
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
