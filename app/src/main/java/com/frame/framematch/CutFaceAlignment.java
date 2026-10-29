@@ -10,26 +10,26 @@ public final class CutFaceAlignment implements MatrixTransformation {
     private final CutFaceMath.Plan plan;
     private final CinematicTimebase timebase;
     private final long durationUs;
-    private final long sourceStartUs;
+    private final long fadeOriginUs;
 
-    private CutFaceAlignment(CutFaceMath.Plan p,long startMs,long durationMs) {
+    private CutFaceAlignment(CutFaceMath.Plan p,long previewStartMs,long originMs,long durationMs) {
         plan=p;
-        timebase=new CinematicTimebase(startMs);
-        sourceStartUs=Math.max(0L,startMs)*1000L;
+        timebase=new CinematicTimebase(previewStartMs);
+        fadeOriginUs=Math.max(0L,originMs)*1000L;
         durationUs=Math.max(1L,durationMs)*1000L;
     }
     public static CutFaceAlignment between(RegionMath.FaceBox referenceEnd,
                                            RegionMath.FaceBox incomingStart,
-                                           long clipStartMs,long fullDurationMs) {
+                                           long previewStartMs,long originMs,long fullDurationMs) {
         if(referenceEnd==null||incomingStart==null)return null;
         CutFaceMath.Plan p=CutFaceMath.estimate(referenceEnd.x,referenceEnd.y,
             referenceEnd.w,referenceEnd.h,incomingStart.x,incomingStart.y,
             incomingStart.w,incomingStart.h);
-        return p.active()?new CutFaceAlignment(p,clipStartMs,fullDurationMs):null;
+        return p.active()?new CutFaceAlignment(p,previewStartMs,originMs,fullDurationMs):null;
     }
     @Override public Matrix getMatrix(long presentationTimeUs) {
-        // Use elapsed time since first retained frame, not composition time.
-        float[] a=plan.at(Math.max(0L,timebase.sourceTimeUs(presentationTimeUs)-sourceStartUs),
+        // Align to the original retained-frame origin even in a clipped preview.
+        float[] a=plan.at(Math.max(0L,timebase.sourceTimeUs(presentationTimeUs)-fadeOriginUs),
             durationUs);
         Matrix matrix=new Matrix();
         matrix.setValues(new float[]{a[0],0f,a[2],0f,a[1],a[3],0f,0f,1f});
