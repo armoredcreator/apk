@@ -833,11 +833,14 @@ public class MainActivity extends Activity {
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
                     if(k==1&&localZoom<=0f&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
-                    if(k==1&&localZoom>0f){
-                        RegionMath.FaceBox previous=endFaces.get(nextClip-1);
+                    // If the preview begins late in an intermediate scene, keep
+                    // the alignment's ORIGINAL origin (not the 3-second crop).
+                    float enteringZoom=k==1?localZoom:cinematicPercentAtCut(idx);
+                    if(enteringZoom>0f){
+                        RegionMath.FaceBox previous=endFaces.get(idx-1);
                         RegionMath.FaceBox incoming=tracks.get(idx)==null?null:tracks.get(idx).first();
                         CutFaceAlignment overlap=CutFaceAlignment.between(previous,incoming,
-                            starts[k],durationMs(clips.get(idx)));
+                            starts[k],entryOffsetsMs.get(idx),durationMs(clips.get(idx)));
                         if(overlap!=null)effects.add(overlap);
                     }
                 }
@@ -943,7 +946,7 @@ public class MainActivity extends Activity {
                         RegionMath.FaceBox previous=endFaces.get(i-1);
                         RegionMath.FaceBox incoming=tracks.get(i)==null?null:tracks.get(i).first();
                         CutFaceAlignment overlap=CutFaceAlignment.between(previous,incoming,
-                            entryOffsetsMs.get(i),durationMs(clips.get(i)));
+                            entryOffsetsMs.get(i),entryOffsetsMs.get(i),durationMs(clips.get(i)));
                         if(overlap!=null)fx.add(overlap);
                     }
                 }
