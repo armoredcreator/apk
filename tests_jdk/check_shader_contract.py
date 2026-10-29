@@ -28,7 +28,12 @@ assert 'V39ReferenceProfile.CLIP1_SHA256.equals(sourceSha256(selected.get(0)))' 
 assert 'V39ReferenceProfile.CLIP2_SHA256.equals(sourceSha256(selected.get(1)))' in main
 assert 'V39ReferenceColorEffect' in main and 'V39ReferenceMotion' in main
 assert 'calibratedV39Pair=verifiedPair' in main
-assert 'entries.get(1)==0L' in main, "no reference curve after trimming clip 2"
+assert 'final boolean verifiedPair=referenceSources;' in main
+assert 'if(i>0&&smartEntrySwitch.isChecked()&&!verifiedPair)' in main, "verified V39 pair must never be trimmed"
+assert main.index('final boolean verifiedPair=referenceSources;') < main.index('for(int i=0;i<selected.size();i++){'), "source hashes must be checked before seeking entry"
+assert 'final boolean v39ReferencePreview=calibratedV39Pair && cinematicZoomSwitch.isChecked();' in main
+assert 'DIAGNÓSTICO CRU (NÃO É O VÍDEO EXPORTADO)' in main
+assert '▶ PRÉVIA REAL DA TRANSIÇÃO V39' in main
 assert 'HorizontalScrollView scroll=new HorizontalScrollView(this)' in main
 assert 'new Bitmap[4+MatchChoices.COUNT]' in main
 assert 'perCutZones' in main and 'chooseCutZone' in main
