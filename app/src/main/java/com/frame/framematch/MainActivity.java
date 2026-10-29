@@ -555,12 +555,22 @@ public class MainActivity extends Activity {
                 ArrayList<Integer> strengths=new ArrayList<>();
                 ArrayList<int[]> zones=new ArrayList<>();
                 ArrayList<Long> entries=new ArrayList<>();
+                // Verify before any automatic entrance selection. The reference pair
+                // must keep every frame and every millisecond of both source audios.
+                boolean referenceSources=false;
+                if(selected.size()==2){
+                    try {
+                        referenceSources=V39ReferenceProfile.CLIP1_SHA256.equals(sourceSha256(selected.get(0)))
+                            && V39ReferenceProfile.CLIP2_SHA256.equals(sourceSha256(selected.get(1)));
+                    }catch(Exception ignored){referenceSources=false;}
+                }
+                final boolean verifiedPair=referenceSources;
                 for(int i=0;i<selected.size();i++){
                     Uri uri=selected.get(i);
                     Bitmap last=frame(uri,true);
                     Bitmap first=frame(uri,false);
                     long selectedOffset=0;
-                    if(i>0&&smartEntrySwitch.isChecked()){
+                    if(i>0&&smartEntrySwitch.isChecked()&&!verifiedPair){
                         long[] times={0,250,500,750,1000,1250,1500};
                         AlignmentMath.Pose[] candidates=new AlignmentMath.Pose[times.length];
                         candidates[0]=FaceTimeline.pose(detector,first);
@@ -595,14 +605,6 @@ public class MainActivity extends Activity {
                     main.post(()->{progress.setProgress(progressIndex*50/selected.size());
                         say("Preparando vídeo "+progressIndex+"/"+selected.size());});
                 }
-                boolean verified=false;
-                if(selected.size()==2 && entries.get(0)==0L && entries.get(1)==0L){
-                    try {
-                        verified=V39ReferenceProfile.CLIP1_SHA256.equals(sourceSha256(selected.get(0)))
-                            && V39ReferenceProfile.CLIP2_SHA256.equals(sourceSha256(selected.get(1)));
-                    } catch(Exception ignored) {verified=false;}
-                }
-                final boolean verifiedPair=verified;
                 MatchResult result=computeChoices(firsts,lasts,earlys,ends,later,earlierEnds,faces,beginPose,finalPose,nextTracks,
                     modes,strengths,zones,strength,regional,align);
                 main.post(()->{
@@ -624,7 +626,7 @@ public class MainActivity extends Activity {
                     perCutZones.clear();perCutZones.addAll(zones);
                     installResult(result);
                     if(verifiedPair && cinematicZoomSwitch.isChecked())
-                        say("V39 laboratório: fontes 183/95 reconhecidas por SHA-256. Calibração de referência ativa; qualidade final depende da exportação.");
+                        say("V39 laboratório: 183/95 verificados; ponto de entrada 0 ms obrigatório e preservado. Calibração ativa. Confira a prévia real.");
                     if(thenExport)startExport();
                 });
             }catch(Exception e){main.post(()->{busy=false;refresh();
@@ -693,12 +695,37 @@ public class MainActivity extends Activity {
             previews.addView(comparison);
             previews.addView(text("Ponto de entrada: "+entryOffsetsMs.get(clipIndex)+" ms"+
                 (entryOffsetsMs.get(clipIndex)>0?" (corta o início do vídeo/áudio; confira a fala)":" (início preservado)"),11,true));
-            previews.addView(text("Sobreposição 50/50 do último frame anterior + primeiro frame alinhado:",11,true));
-            ImageView alignedOverlay=new ImageView(this);
-            alignedOverlay.setImageBitmap(pictures[3]);alignedOverlay.setAdjustViewBounds(true);
-            previews.addView(alignedOverlay,new LinearLayout.LayoutParams(-1,dp(210)));
-            previews.addView(button("AUTO NATURAL — recomendar para este corte",
-                v->chooseColor(clipIndex,-1)));
+            final boolean v39ReferencePreview=calibratedV39Pair && cinematicZoomSwitch.isChecked();
+            if(v39ReferencePreview){
+                // The static raw-frame onion skin does NOT include V39's zoom,
+                // persistent grade, or actual video-frame timing. Hiding it avoids
+                // advertising a misleading double-face as the final cut.
+                previews.addView(text(
+                    "V39 LAB: 183 + 95 verificados por SHA-256, entrada integral 0 ms. "+
+                    "A comparação 50/50 crua foi ocultada porque NÃO representa a união "+
+                    "com zoom e cor da V39. Confira a PRÉVIA RENDERIZADA abaixo.",
+                    12,true));
+            }else{
+                previews.addView(text(
+                    "DIAGNÓSTICO CRU (NÃO É O VÍDEO EXPORTADO): mistura 50/50 do "+
+                    "último quadro anterior com o primeiro quadro seguinte. "+
+                    "Expressões diferentes podem mostrar dois rostos.",
+                    11,true));
+                ImageView alignedOverlay=new ImageView(this);
+                alignedOverlay.setImageBitmap(pictures[3]);alignedOverlay.setAdjustViewBounds(true);
+                previews.addView(alignedOverlay,new LinearLayout.LayoutParams(-1,dp(210)));
+            }
+            if(!v39ReferencePreview){
+                previews.addView(button("AUTO NATURAL — recomendar para este corte",
+                    v->chooseColor(clipIndex,-1)));
+            }
+            if(v39ReferencePreview){
+                previews.addView(button("▶ PRÉVIA REAL DA TRANSIÇÃO V39 (recuo completo)",
+                    v->renderCutPreview(clipIndex)));
+                previews.addView(text("Perfil V39 calibrado ativo. As alternativas de "+
+                    "cor comuns NÃO são aplicadas a este par específico.",11,false));
+                continue;
+            }
             HorizontalScrollView scroll=new HorizontalScrollView(this);
             LinearLayout variants=new LinearLayout(this);
             variants.setOrientation(LinearLayout.HORIZONTAL);
