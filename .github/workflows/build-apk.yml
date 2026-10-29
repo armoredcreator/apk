@@ -57,7 +57,7 @@ jobs:
             echo "Ignorando release de commit antigo: $GITHUB_SHA; head atual: $CURRENT_BRANCH_SHA"
             exit 0
           fi
-          TAG="v0.9.3-alpha"
+          TAG="v0.9.4-alpha"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -65,7 +65,7 @@ jobs:
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "FrameMatch Android 0.9.3 - AUTO CINEMA experimental por corte" \
-              --notes "APK experimental: diagnóstico de necessidade de zoom por união, com recusa conservadora se a geometria for insegura. Inclui prévia exportada por corte. A V39 segue como referência visual; paridade Android e ausência de flashes precisam ser confirmadas em vídeo exportado e em cenas variadas." \
+              --title "FrameMatch Android 0.9.4 - Correção de enquadramento e recuo V37" \
+              --notes "APK experimental: zoom no eixo do rosto em ambos os lados do corte, aproximação iniciada 3s antes e recuo contínuo calibrado com medições V37. Não anuncia paridade V39 sem comparar vídeo exportado no Android." \
               --prerelease
           fi
