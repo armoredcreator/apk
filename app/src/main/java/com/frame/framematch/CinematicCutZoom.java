@@ -9,7 +9,7 @@ import androidx.media3.effect.MatrixTransformation;
  * The desktop V39 remains the visual reference; this shader has not been
  * verified as pixel-equivalent to V39 on a physical Android device.
  *
- * One C2-continuous recede trajectory replaces the old segmented lookup.
+ * One monotone C1-continuous recede trajectory replaces the old lookup.
  * Timestamps are anchored to each clip's first frame, including for clipped previews.
  * No hard release, no midway scale reset, and no secondary zoom effect.
  */
