@@ -1,0 +1,19 @@
+FRAMEMATCH ANDROID — 0.2-dev
+
+ESTE ZIP É CÓDIGO-FONTE, NÃO UM APK COMPILADO.
+
+Para compilar em repositório novo:
+1. Suba os arquivos do ZIP para a raiz do seu repositório no GitHub.
+2. Confira se .github/workflows/build-apk.yml foi incluído.
+3. Entre em Actions > Compilar APK Android > Run workflow.
+4. Se o build ficar verde, baixe o artefato APK de depuração.
+
+Melhorias no código: correção separada de céu azul, pele, lábios e ambiente
+por máscaras aproximadas via GPU; rastreamento facial local com ML Kit;
+zoom progressivo conservador; controles e comparação de quadros;
+união de 2 a 16 clipes MP4. Originais intocados.
+
+ATENÇÃO: sem compilação SDK/Android neste ambiente. Não há garantias
+quanto a erros de build, codecs, saída real nem continuidade imperceptível.
+Ajuste de enquadramento não sintetiza movimento ou expressões humanas.
+Veja README.md para o estado real do projeto e limitações.
