@@ -42,6 +42,15 @@ public final class ZoomTimelineSelfTest {
         float end2=ZoomTimeline.recede(duration-83_333L,duration,peak);
         ok(Math.abs((end2-end1)-(end1-1f)) < 0.0001f,
            "recede must end without a velocity step");
-        System.out.println("ZoomTimelineSelfTest OK: V39-target curve continuous, monotone, ends at 1.0");
+        // Independent optical measurement of approved V37 94->95 (24fps).
+        near(ZoomTimeline.approach(6_000_000L,duration,ramp,peak),
+             1.0857f,.001f,"V37 scale at 6s");
+        near(ZoomTimeline.approach(7_000_000L,duration,ramp,peak),
+             1.2449f,.001f,"V37 scale at 7s");
+        near(ZoomTimeline.recede(2_000_000L,duration,peak),
+             1.2514f,.001f,"V37 scale at 10s global");
+        near(ZoomTimeline.recede(4_000_000L,duration,peak),
+             1.1799f,.001f,"V37 scale at 12s global");
+        System.out.println("ZoomTimelineSelfTest OK: measured V37 motion, monotone camera, full return");
     }
 }
