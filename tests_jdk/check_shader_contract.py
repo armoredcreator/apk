@@ -22,7 +22,13 @@ assert 'scaled(calibrated,.9f,1f,0f,0f)' in choices
 assert 'scaled(calibrated,.3f,0f,1f,1f)' in choices
 assert 'selectedModes.set(clipIndex,mode)' in main
 assert 'MatchResult result=computeChoices(firstFrames,lastFrames,earlyFrames,nearEndFrames,' in main
-assert 'if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)' in main
+assert 'if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL' in main
+assert '&& !(calibratedV39Pair&&cinematicZoomSwitch.isChecked()))' in main
+assert 'V39ReferenceProfile.CLIP1_SHA256.equals(sourceSha256(selected.get(0)))' in main
+assert 'V39ReferenceProfile.CLIP2_SHA256.equals(sourceSha256(selected.get(1)))' in main
+assert 'V39ReferenceColorEffect' in main and 'V39ReferenceMotion' in main
+assert 'calibratedV39Pair=verifiedPair' in main
+assert 'entries.get(1)==0L' in main, "no reference curve after trimming clip 2"
 assert 'HorizontalScrollView scroll=new HorizontalScrollView(this)' in main
 assert 'new Bitmap[4+MatchChoices.COUNT]' in main
 assert 'perCutZones' in main and 'chooseCutZone' in main
