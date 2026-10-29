@@ -81,7 +81,8 @@ public class MainActivity extends Activity {
     private SeekBar intensity;
     private ProgressBar progress;
     private Button addButton, analyzeButton, exportButton, cancelButton;
-    private android.widget.CheckBox alignSwitch, regionSwitch, cinematicZoomSwitch;
+    private android.widget.CheckBox alignSwitch, regionSwitch, cinematicZoomSwitch, autoCinemaSwitch;
+    private final ArrayList<AdaptiveCutPlanner.Decision> cinematicDecisions=new ArrayList<>();
     private SeekBar faceDuration,faceStrength;
     private android.widget.CheckBox matchSizeSwitch, matchBitrateSwitch, matchFpsSwitch;
     private TextView masterInfo;
@@ -151,11 +152,21 @@ public class MainActivity extends Activity {
         matchFpsSwitch.setChecked(false);container.addView(matchFpsSwitch);
         enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
         container.addView(enableAllButton);
-        container.addView(text("Ativar tudo liga também o zoom V39. Para usar sem zoom, desmarque a opção V39. As 6 alternativas de cor são EXCLUSIVAS.",12,false));
+        container.addView(text("Diagnóstico automático por união. Zoom manual de 33% é apenas referência experimental de 2 clipes; NÃO comprova V39.",12,false));
+        autoCinemaSwitch=new android.widget.CheckBox(this);
+        autoCinemaSwitch.setText("AUTO CINEMA (experimental): diagnosticar cada união; rejeitar zoom inseguro");
+        autoCinemaSwitch.setChecked(true);container.addView(autoCinemaSwitch);
         cinematicZoomSwitch=new android.widget.CheckBox(this);
-        cinematicZoomSwitch.setText("ZOOM CINEMATOGRÁFICO (alvo V39): 33% antes da união e recuo LENTO até o enquadramento original da cena 2 (2 clipes)");
+        cinematicZoomSwitch.setText("ZOOM MANUAL 33% (referência V39; apenas 2 clipes)");
         cinematicZoomSwitch.setChecked(false);container.addView(cinematicZoomSwitch);
-        cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
+        autoCinemaSwitch.setOnCheckedChangeListener((b,checked)->{
+            if(checked&&cinematicZoomSwitch.isChecked())cinematicZoomSwitch.setChecked(false);
+            invalidateAnalysis();
+        });
+        cinematicZoomSwitch.setOnCheckedChangeListener((b,checked)->{
+            if(checked&&autoCinemaSwitch.isChecked())autoCinemaSwitch.setChecked(false);
+            invalidateAnalysis();
+        });
         alignSwitch.setOnCheckedChangeListener((b,checked)->invalidateAnalysis());
         intensity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar b,int p,boolean from){if(from)invalidateAnalysis();}
@@ -228,7 +239,7 @@ public class MainActivity extends Activity {
 
     private void invalidateAnalysis(){
         analyzed=false;plans.clear();tracks.clear();zooms.clear();alternatives.clear();
-        selectedModes.clear();cutIntensities.clear();perCutZones.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
+        selectedModes.clear();cutIntensities.clear();perCutZones.clear();cinematicDecisions.clear();firstFrames.clear();lastFrames.clear();earlyFrames.clear();
         nearEndFrames.clear();oneSecondFrames.clear();oneSecondBeforeEndFrames.clear();endFaces.clear();startPoses.clear();endPoses.clear();entryOffsetsMs.clear();previews.removeAllViews();
     }
     private void refresh(){
@@ -257,7 +268,7 @@ public class MainActivity extends Activity {
         exportButton.setEnabled(!busy && clips.size()>=2);
         intensity.setEnabled(!busy);regionSwitch.setEnabled(!busy);alignSwitch.setEnabled(!busy);
         faceStrength.setEnabled(!busy);faceDuration.setEnabled(!busy);smartEntrySwitch.setEnabled(!busy);
-        cinematicZoomSwitch.setEnabled(!busy);
+        cinematicZoomSwitch.setEnabled(!busy);autoCinemaSwitch.setEnabled(!busy);
         cancelButton.setVisibility(busy&&transformer!=null?View.VISIBLE:View.GONE);
     }
 
@@ -323,9 +334,9 @@ public class MainActivity extends Activity {
         matchSizeSwitch.setChecked(true);
         matchBitrateSwitch.setChecked(true);
         matchFpsSwitch.setChecked(true);
-        cinematicZoomSwitch.setChecked(true);
+        autoCinemaSwitch.setChecked(true);
         if(!changed)invalidateAnalysis();
-        say("Correções ativadas, inclusive zoom V39: aproxima antes do corte e recua durante toda a cena 2.");
+        say("AUTO CINEMA: diagnostica cada corte e evita aplicar zoom sem evidência.");
         refresh();
     }
     private void autoNaturalAll(){
@@ -471,6 +482,18 @@ public class MainActivity extends Activity {
         zooms.clear();zooms.addAll(result.alignments);
         analyzed=true;analyzedStrength=intensity.getProgress()/100f;
         busy=false;progress.setProgress(100);
+        cinematicDecisions.clear();cinematicDecisions.add(null);
+        for(int i=1;i<clips.size();i++){
+            try{
+                Bitmap a=lastFrames.get(i-1),b=firstFrames.get(i);
+                RegionMath.FaceBox next=tracks.get(i)==null?null:tracks.get(i).first();
+                cinematicDecisions.add(AdaptiveCutPlanner.decide(
+                    pixels(a),a.getWidth(),a.getHeight(),
+                    pixels(b),b.getWidth(),b.getHeight(),
+                    endFaces.get(i-1),next,
+                    durationMs(clips.get(i-1)),durationMs(clips.get(i))));
+            }catch(Exception ignored){cinematicDecisions.add(null);}
+        }
         renderPreviews(result.previewRows);refresh();
         say("Clip 1 é a referência MESTRA para todas as cenas. Escolha a correção de cada corte.");
     }
@@ -667,6 +690,14 @@ public class MainActivity extends Activity {
                 comparison.addView(column,new LinearLayout.LayoutParams(0,-2,1f));
             }
             previews.addView(comparison);
+            if(clipIndex<cinematicDecisions.size()&&cinematicDecisions.get(clipIndex)!=null){
+                AdaptiveCutPlanner.Decision cd=cinematicDecisions.get(clipIndex);
+                String value=cd.action==AdaptiveCutPlanner.Action.ZOOM
+                    ? String.format(java.util.Locale.US,"Zoom sugerido %.1f%%",cd.zoomPercent)
+                    : cd.action==AdaptiveCutPlanner.Action.REVIEW?"REVISÃO NECESSÁRIA":"Sem zoom";
+                previews.addView(text("AUTO CINEMA: "+value+" — "+cd.reason+
+                    ". Confira a prévia REAL antes de aprovar.",11,true));
+            }
             previews.addView(text("Ponto de entrada: "+entryOffsetsMs.get(clipIndex)+" ms"+
                 (entryOffsetsMs.get(clipIndex)>0?" (corta o início do vídeo/áudio; confira a fala)":" (início preservado)"),11,true));
             previews.addView(text("Sobreposição 50/50 do último frame anterior + primeiro frame alinhado:",11,true));
@@ -748,6 +779,16 @@ public class MainActivity extends Activity {
     }
 
     /** Short real Media3 export, with the same shader and alignment as the full video. */
+    /** Use the same per-cut decision for the real preview and the final MP4. */
+    private float cinematicPercentAtCut(int cut) {
+        if(cut<1||cut>=clips.size())return 0f;
+        if(autoCinemaSwitch.isChecked()){
+            if(cut>=cinematicDecisions.size())return 0f;
+            AdaptiveCutPlanner.Decision p=cinematicDecisions.get(cut);
+            return p!=null&&p.useZoom()?p.zoomPercent:0f;
+        }
+        return cinematicZoomSwitch.isChecked()&&clips.size()==2?33f:0f;
+    }
     private void renderCutPreview(int nextClip){
         if(busy||!analyzed||nextClip<1||nextClip>=clips.size())return;
         if(Math.abs(analyzedStrength-intensity.getProgress()/100f)>.001f){
@@ -755,7 +796,8 @@ public class MainActivity extends Activity {
         }
         try{
             long duration=durationMs(clips.get(nextClip-1));
-            boolean fullRecedePreview=cinematicZoomSwitch.isChecked() && clips.size()==2;
+            float localZoom=cinematicPercentAtCut(nextClip);
+            boolean fullRecedePreview=localZoom>0f;
             long previousStart=Math.max(nextClip==1?0:entryOffsetsMs.get(nextClip-1),
                 duration-(fullRecedePreview?3000:1500));
             long nextStart=entryOffsetsMs.get(nextClip);
@@ -782,15 +824,17 @@ public class MainActivity extends Activity {
                         effects.add(new RegionEffect(plans.get(idx),tracks.get(idx)));
                     // The beginning of this preview's first clip must not re-trigger
                     // the alignment intended for its OWN preceding cut.
-                    if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
+                    if(k==1&&localZoom<=0f&&zooms.get(idx)!=null)effects.add(zooms.get(idx));
                 }
-                if(cinematicZoomSwitch.isChecked() && clips.size()==2){
-                    if(k==0){
-                        // Approach is computed from the original source timeline, not the clipped preview.
-                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f));
-                    }else{
-                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f));
-                    }
+                // Preview and full export share the exact plan for this cut.
+                if(k==0){
+                    float incoming=cinematicPercentAtCut(idx);
+                    if(incoming>0f)
+                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),incoming));
+                    if(localZoom>0f)
+                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom));
+                }else if(localZoom>0f){
+                    effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom));
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
@@ -879,21 +923,17 @@ public class MainActivity extends Activity {
                     if(regionSwitch.isChecked() && selectedModes.get(i)!=MatchChoices.ORIGINAL)
                         fx.add(new RegionEffect(plans.get(i),tracks.get(i)));
                     // Color masks must be evaluated BEFORE moving/zooming the face.
-                    if(!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(i)!=null)fx.add(zooms.get(i));
+                    if(cinematicPercentAtCut(i)<=0f&&zooms.get(i)!=null)fx.add(zooms.get(i));
                 }
-                if(cinematicZoomSwitch.isChecked() && clips.size()==2){
-                    if(i+1<clips.size()){
-                        // The current clip approaches its NEXT cut over the final three seconds.
-                        fx.add(CinematicCutZoom.before(i==0?0:entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
-                    }else if(i>0){
-                        // Last clip: finish the recede before the final frame.
-                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
-                    }
-                    // Middle clips need a recede from the previous cut as well.
-                    if(i>0 && i+1<clips.size()){
-                        fx.add(CinematicCutZoom.after(entryOffsetsMs.get(i),durationMs(clips.get(i)),33f));
-                    }
-                }
+                // Independent entering recede and outgoing approach; never a scale reset.
+                float incoming=cinematicPercentAtCut(i);
+                float outgoing=cinematicPercentAtCut(i+1);
+                long sourceStart=i==0?0:entryOffsetsMs.get(i);
+                long sourceDuration=durationMs(clips.get(i));
+                if(incoming>0f)
+                    fx.add(CinematicCutZoom.after(sourceStart,sourceDuration,incoming));
+                if(outgoing>0f)
+                    fx.add(CinematicCutZoom.before(sourceStart,sourceDuration,outgoing));
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
                 int[] outputSize=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
