@@ -38,8 +38,10 @@ public final class AdaptiveCutPlanner {
            last.length!=width*height||first.length!=targetWidth*targetHeight)
             return new Decision(Action.REVIEW,0,1f,"Quadros de fronteira inválidos");
         float mismatch=frameDifference(last,width,height,first,targetWidth,targetHeight);
+        // Exposure/white-balance change alone must NOT trigger a camera zoom.
+        float structural=structuralDifference(last,width,height,first,targetWidth,targetHeight);
         if(previousFace==null||nextFace==null) {
-            if(mismatch>=.065f)
+            if(structural>=.065f)
                 return new Decision(Action.REVIEW,0,mismatch,"Sem rosto rastreável; verificar o corte");
             return new Decision(Action.KEEP,0,mismatch,"Sem rosto confiável: preservar enquadramento");
         }
@@ -54,7 +56,7 @@ public final class AdaptiveCutPlanner {
         // An incomplete 3s approach or recede may produce an abrupt trajectory.
         if(previousDurationMs<4200L||nextDurationMs<4200L)
             return new Decision(Action.REVIEW,0,mismatch,"Duração insuficiente para movimento seguro");
-        float score=Math.max(0f,mismatch-.020f)*5.1f + scaleGap*.50f +
+        float score=Math.max(0f,structural-.020f)*5.1f + scaleGap*.50f +
             shiftX*.42f + shiftY*.28f;
         if(score<.075f)
             return new Decision(Action.KEEP,0,mismatch,"Quadros próximos: sem zoom desnecessário");
@@ -85,4 +87,34 @@ public final class AdaptiveCutPlanner {
         }
         return (float)(difference/(nx*ny*3d*255d));
     }
+    /**
+     * Remove the average per-channel color offset, then compare spatial residuals.
+     * This distinguishes a uniform exposure/white-balance change from an actual
+     * change in composition. It is not optical flow or a semantic image model.
+     */
+    public static float structuralDifference(int[] a,int aw,int ah,int[] b,int bw,int bh) {
+        final int nx=24,ny=36,count=nx*ny;
+        double[] dr=new double[count],dg=new double[count],db=new double[count];
+        double mr=0,mg=0,mb=0;
+        for(int j=0;j<ny;j++){
+            int ya=Math.min(ah-1,(j*2+1)*ah/(ny*2));
+            int yb=Math.min(bh-1,(j*2+1)*bh/(ny*2));
+            for(int i=0;i<nx;i++){
+                int xa=Math.min(aw-1,(i*2+1)*aw/(nx*2));
+                int xb=Math.min(bw-1,(i*2+1)*bw/(nx*2));
+                int p=a[ya*aw+xa],q=b[yb*bw+xb],k=j*nx+i;
+                dr[k]=((p>>>16)&255)-((q>>>16)&255);
+                dg[k]=((p>>>8)&255)-((q>>>8)&255);
+                db[k]=(p&255)-(q&255);
+                mr+=dr[k];mg+=dg[k];mb+=db[k];
+            }
+        }
+        mr/=count;mg/=count;mb/=count;
+        double residual=0;
+        for(int k=0;k<count;k++){
+            residual+=Math.abs(dr[k]-mr)+Math.abs(dg[k]-mg)+Math.abs(db[k]-mb);
+        }
+        return (float)(residual/(count*3d*255d));
+    }
+
 }
