@@ -80,9 +80,13 @@ assert 'private void renderCutPreview(int nextClip)' in main
 assert 'setEndPositionMs(ends[k])' in main
 assert 'new VideoView(this)' in main
 assert 'previewPlayer.setOnPreparedListener' in main
-assert 'if(k==1&&!(cinematicZoomSwitch.isChecked()&&clips.size()==2)&&zooms.get(idx)!=null)' in main
-assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),33f)' in main
-assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),33f)' in main
+assert 'if(k==1&&localZoom<=0f&&zooms.get(idx)!=null)' in main
+assert 'cinematicPercentAtCut(nextClip)' in main, "preview must use per-cut decisions"
+assert 'cinematicPercentAtCut(i+1)' in main, "export must anticipate the outgoing cut"
+assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom)' in main
+assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom)' in main
+assert 'cinematicDecisions.add(AdaptiveCutPlanner.decide(' in main
+assert 'autoCinemaSwitch.setChecked(true)' in main
 camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read_text(encoding='utf-8')
 # Experimental V39-target implementation: source timeline and ONE smooth recede.
 # Numeric continuity, monotonicity, cut-scale parity and end frame are checked
@@ -90,7 +94,7 @@ camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read
 assert 'ZoomTimeline.approach(sourceUs, durationUs, 3_000_000L, peak)' in camera, "approach must start 3s before the cut"
 assert 'ZoomTimeline.recede(sourceUs, durationUs, peak)' in camera, "camera must use a single recede trajectory"
 assert 'RETURN_RATIO' not in camera and 'v37Return' not in camera, "old segmented return table was reintroduced"
-assert 'alvo V39' in main, "Android UI must identify V39 as visual target"
+assert 'referência V39' in main, "Android UI must identify V39 as unverified visual reference"
 assert 'pixel-equivalent' in camera, "do not claim unverified desktop V39 parity"
 assert 'cinematicZoomSwitch.setChecked(false)' in main
 assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
