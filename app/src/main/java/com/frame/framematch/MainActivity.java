@@ -789,6 +789,13 @@ public class MainActivity extends Activity {
         }
         return cinematicZoomSwitch.isChecked()&&clips.size()==2?33f:0f;
     }
+    /** One camera pivot per cut; the outgoing and incoming videos MUST share it. */
+    private CinematicCameraPivot cinematicPivotAtCut(int cut) {
+        if(cinematicZoomSwitch.isChecked())return CinematicCameraPivot.validatedPortrait();
+        RegionMath.FaceBox f=cut>0&&cut-1<endFaces.size()?endFaces.get(cut-1):null;
+        return CinematicCameraPivot.fromFace(f);
+    }
+
     private void renderCutPreview(int nextClip){
         if(busy||!analyzed||nextClip<1||nextClip>=clips.size())return;
         if(Math.abs(analyzedStrength-intensity.getProgress()/100f)>.001f){
@@ -830,11 +837,11 @@ public class MainActivity extends Activity {
                 if(k==0){
                     float incoming=cinematicPercentAtCut(idx);
                     if(incoming>0f)
-                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),incoming));
+                        effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),incoming,cinematicPivotAtCut(idx)));
                     if(localZoom>0f)
-                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom));
+                        effects.add(CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip)));
                 }else if(localZoom>0f){
-                    effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom));
+                    effects.add(CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip)));
                 }
                 int[] size=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
@@ -931,9 +938,9 @@ public class MainActivity extends Activity {
                 long sourceStart=i==0?0:entryOffsetsMs.get(i);
                 long sourceDuration=durationMs(clips.get(i));
                 if(incoming>0f)
-                    fx.add(CinematicCutZoom.after(sourceStart,sourceDuration,incoming));
+                    fx.add(CinematicCutZoom.after(sourceStart,sourceDuration,incoming,cinematicPivotAtCut(i)));
                 if(outgoing>0f)
-                    fx.add(CinematicCutZoom.before(sourceStart,sourceDuration,outgoing));
+                    fx.add(CinematicCutZoom.before(sourceStart,sourceDuration,outgoing,cinematicPivotAtCut(i+1)));
                 // Match master proportions without stretching pixels. Old 540x960 when disabled.
                 int[] outputSize=masterProfile==null?new int[]{540,960}:
                     masterProfile.outputSize(matchSizeSwitch.isChecked());
