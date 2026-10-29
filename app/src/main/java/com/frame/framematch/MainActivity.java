@@ -155,7 +155,7 @@ public class MainActivity extends Activity {
         matchFpsSwitch.setChecked(false);container.addView(matchFpsSwitch);
         enableAllButton=button("ATIVAR TODAS AS CORREÇÕES COMPATÍVEIS",v->enableEverything());
         container.addView(enableAllButton);
-        container.addView(text("Modo AUTO analisa cada união; a referência manual de 33% só deve ser usada após conferir a prévia. Não declara equivalência automática à V37/V39.",12,false));
+        container.addView(text("Modo AUTO analisa cada união; a referência manual de 33% só deve ser usada após conferir a prévia. Não declara equivalência automática à V37/V39; a referência V39 ainda precisa ser comparada ao MP4 Android.",12,false));
         autoCinemaSwitch=new android.widget.CheckBox(this);
         autoCinemaSwitch.setText("AUTO CINEMA (experimental): diagnosticar cada união; rejeitar zoom inseguro");
         autoCinemaSwitch.setChecked(true);container.addView(autoCinemaSwitch);
@@ -790,7 +790,7 @@ public class MainActivity extends Activity {
                     });
                 }
             }
-            previews.addView(button("▶ PRÉVIA REAL DESTA TRANSIÇÃO (inclui o recuo)",
+            previews.addView(button("▶ PRÉVIA DESTA TRANSIÇÃO — REAL (inclui o recuo)",
                 v->renderCutPreview(clipIndex)));
             previews.addView(text("Selecionada: "+MatchChoices.LABELS[selectedModes.get(clipIndex)]+
                 " · Referência de cor fixa no Clip 1. Outros cortes não mudam.",11,false));
