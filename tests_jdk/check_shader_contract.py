@@ -83,19 +83,20 @@ assert 'previewPlayer.setOnPreparedListener' in main
 assert 'if(k==1&&localZoom<=0f&&zooms.get(idx)!=null)' in main
 assert 'cinematicPercentAtCut(nextClip)' in main, "preview must use per-cut decisions"
 assert 'cinematicPercentAtCut(i+1)' in main, "export must anticipate the outgoing cut"
-assert 'CinematicCutZoom.before(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip))' in main
-assert 'CinematicCutZoom.after(starts[k],durationMs(clips.get(idx)),localZoom,cinematicPivotAtCut(nextClip))' in main
+assert 'new CinematicDualCutZoom(starts[k],durationMs(clips.get(idx))' in main, "preview must use single camera transform"
+assert 'new CinematicDualCutZoom(sourceStart,sourceDuration' in main, "export must use same single camera transform"
+assert 'CinematicCutZoom.before(' not in main and 'CinematicCutZoom.after(' not in main, "stacked transforms may cause new jumps"
 assert 'cinematicDecisions.add(AdaptiveCutPlanner.decide(' in main
 assert 'autoCinemaSwitch.setChecked(true)' in main
-camera=Path('app/src/main/java/com/frame/framematch/CinematicCutZoom.java').read_text(encoding='utf-8')
-# Experimental V39-target implementation: source timeline and ONE smooth recede.
-# Numeric continuity, monotonicity, cut-scale parity and end frame are checked
-# frame-by-frame by ZoomTimelineSelfTest.java (not by brittle source strings).
-assert 'ZoomTimeline.approach(sourceUs, durationUs, 3_000_000L, peak)' in camera, "approach must start 3s before the cut"
-assert 'ZoomTimeline.recede(sourceUs, durationUs, peak)' in camera, "camera must use a single recede trajectory"
-assert 'RETURN_RATIO' not in camera and 'v37Return' not in camera, "old segmented return table was reintroduced"
+camera=Path('app/src/main/java/com/frame/framematch/CinematicDualCutZoom.java').read_text(encoding='utf-8')
+curve=Path('app/src/main/java/com/frame/framematch/CinemaCurve.java').read_text(encoding='utf-8')
+assert 'CinemaCurve.evaluate(' in camera, "single camera effect must use tested curve"
+assert 'ZoomTimeline.approach(' in curve and 'ZoomTimeline.recede(' in curve, "same V37 approach/recede"
+assert 'Math.hypot(remaining,approaching)' in curve, "overlapping cuts must be combined smoothly"
+assert 'return new Frame(zoom,(1f-zoom)*cx,(1f-zoom)*cy)' in curve, "shared camera pivot must stay fixed"
+assert 'RETURN_RATIO' not in curve and 'v37Return' not in curve, "segmented reset cannot return"
 assert 'referência V39' in main, "Android UI must identify V39 as unverified visual reference"
-assert 'pixel-equivalent' in camera, "do not claim unverified desktop V39 parity"
+assert 'not a guarantee of pixel parity' in camera, "do not claim unverified desktop parity"
 assert 'cinematicZoomSwitch.setChecked(false)' in main
 assert '▶ PRÉVIA DESTA TRANSIÇÃO' in main
 print("Cut preview: two clipped segments, color/geometry and integrated video playback OK")
