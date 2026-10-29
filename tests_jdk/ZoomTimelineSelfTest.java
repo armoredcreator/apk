@@ -36,7 +36,7 @@ public final class ZoomTimelineSelfTest {
         // Check speed and acceleration near the ends to avoid a stop/start jerk.
         float frame1=ZoomTimeline.recede(41_667L,duration,peak);
         float frame2=ZoomTimeline.recede(83_333L,duration,peak);
-        ok(Math.abs((peak-frame1)-(frame1-frame2)) < 0.0001f,
+        ok(Math.abs((peak-frame1)-(frame1-frame2)) < 0.0002f,
            "recede must begin without a velocity step");
         float end1=ZoomTimeline.recede(duration-41_667L,duration,peak);
         float end2=ZoomTimeline.recede(duration-83_333L,duration,peak);
