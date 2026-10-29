@@ -623,6 +623,8 @@ public class MainActivity extends Activity {
                     cutIntensities.clear();cutIntensities.addAll(strengths);
                     perCutZones.clear();perCutZones.addAll(zones);
                     installResult(result);
+                    if(verifiedPair && cinematicZoomSwitch.isChecked())
+                        say("V39 laboratório: fontes 183/95 reconhecidas por SHA-256. Calibração de referência ativa; qualidade final depende da exportação.");
                     if(thenExport)startExport();
                 });
             }catch(Exception e){main.post(()->{busy=false;refresh();
