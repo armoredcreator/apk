@@ -46,6 +46,30 @@ estrutural (com remoção da mediana RGB) em pontos entre 6s e 14s
 de 40% a 72% comparado a 230.mp4. Essa comparação NÃO é uma
 validação de cor, áudio, rosto, transição perceptiva ou APK no aparelho.
 
+## Sobreposição facial no instante exato do corte (implementação posterior)
+Antes da correção, o código Android desativava `ContinuityZoom`
+assim que o zoom de câmera estava ativo. Isso fazia desaparecer
+justamente o encaixe facial que a prévia aprovada tinha conseguido.
+
+- A primeira imagem retida da cena 2 é alinhada ao último quadro da
+  cena 1 em escala X e Y independentes (até 5% contração / 6% expansão),
+  centralizando o rosto com o mesmo eixo nos dois lados do corte.
+- Quando há risco de grande deformação ou deslocamento, o motor retorna
+  uma transformação identidade. Não confundir similaridade de caixas
+  faciais com prova de identidade da personagem.
+- O alinhamento começa TOTALMENTE aplicado no quadro inicial da cena 2.
+- O efeito é aplicado ANTES do zoom cinematográfico da cena 2;
+  este zoom já está no pico no corte, centrado no mesmo pivot da cena 1.
+- A correção geométrica facial decai em curva C2 até voltar à aparência
+  original do clipe, enquanto o zoom recua até 100% do enquadramento.
+- A prévia e a exportação completa agora chamam o mesmo
+  `CutFaceAlignment`, no mesmo ponto da lista de efeitos.
+- `CutFaceMathSelfTest` exige correspondência da posição no quadro de
+  entrada, devolução de escala X/Y 1x e ausência de passos bruscos.
+- ESTA IMPLEMENTAÇÃO AINDA EXIGE TESTE VISUAL DE EXPORTAÇÃO MEDIA3
+  NO ANDROID COM 94/95 E COM OUTROS PARES. Um autoteste Java não
+  equivale a renderização H.264/Media3.
+
 ## Estado verificável
 - Geometria e curva V37: implementadas em Java, com autotestes JDK.
 - Compilação Android: confirmar status do CI, não inferir de commit.
